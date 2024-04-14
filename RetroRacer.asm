@@ -58,9 +58,53 @@ INT_PEND_1		= $d661					; Pending register for interrupts 8-15
 INT_MASK_0		= $d66c					; Mask register for interrupts 0-7
 INT_MASK_1		= $d66d					; Mask register for interrupts 8-15
 
+; Math Coprocessor
+MULU_A_L		= $de00					; unsigned A LOW byte
+MULU_A_H		= $de01					; unsigned A HIGH Byte
+MULU_B_L		= $de02					; unsigned B LOW byte
+MULU_B_H		= $de03					; unsigned B HIGH byte
+MULU_LL			= $de10					; A x B byte 0
+MULU_LH			= $de11					; A x B byte 1
+MULU_HL			= $de12					; A x B byte 3
+MULU_HH			= $de13					; A x B byte 4
+
 ; Misc Variables for Indirect Indexing
 ptr_src			= $80					; A pointer to read data
 ptr_dst			= $82					; A pointer to write data
+
+player.sprite	= player				; The sprite number 
+player.xLOW		= player+1				; sprite x position low
+player.xHI		= player+2				; sprite x position High
+player.yFRAC	= player+3				; sprite y position fixed point decimal
+player.yLOW		= player+4				; sprite y position low
+player.yHI		= player+5				; sprite y position High
+player.car		= player+6				; car image data (which art to use)
+player.lane		= player+7				; current lane car occupies
+player.speedLOW	= player+8				; car speed Low byte
+player.speedHI	= player+9				; car speed High byte
+player.speedTOP	= player+10				; car top speed (based on car type)
+player.xTL		= player+11				; top left boundry box for collision detection
+player.yTL		= player+12				; top left boundry box for collision detection
+player.xBR		= player+13				; bottom right boundry box for collision detection
+player.yBR		= player+14				; bottom right boundry box for collision detection
+player.AI 		= player+15				; Car AI 1, defensive, 2 aggressive, 3 racing, 4 police
+
+traffic.sprite	= traffic				; The sprite number 
+traffic.xLOW	= traffic+1				; sprite x position low
+traffic.xHI		= traffic+2				; sprite x position High
+traffic.yFRAC	= traffic+3				; sprite y position fixed point decimal
+traffic.yLOW	= traffic+4				; sprite y position low
+traffic.yHI		= traffic+5				; sprite y position High
+traffic.car		= traffic+6				; car image data (which art to use)
+traffic.lane	= traffic+7				; current lane car occupies
+traffic.speedLOW= traffic+8				; car speed Low byte
+traffic.speedHI	= traffic+9				; car speed High byte
+traffic.speedTOP= traffic+10			; car top speed (based on car type)
+traffic.xTL		= traffic+11			; top left boundry box for collision detection
+traffic.yTL		= traffic+12			; top left boundry box for collision detection
+traffic.xBR		= traffic+13			; bottom right boundry box for collision detection
+traffic.yBR		= traffic+14			; bottom right boundry box for collision detection
+traffic.AI 		= traffic+15			; Car AI 1, defensive, 2 aggressive, 3 racing, 4 police
 
 
 .cpu "w65c02"
@@ -89,6 +133,15 @@ event:	.dstruct	kernel.event.event_t
 
 
 *=$2000
+; Self running code to send via USB port the F256. Saving wear and tear on the memory card slot.
+; dipswitch 1 should be set to on.
+	.byte $f2,$56						; Required bytes for the Kernel to identify
+	.byte $03,$01						; how big is the program in 8K sections, What slot to map to
+	.byte $0b,$20						; the starting address of your program
+	.byte $00,$00,$00,$00				; reserved
+	.byte $00							; terminating byte
+
+; My program starts here!	
 	stz MMU_IO_CTRL						; should do this on every program
 
 ;init_events:
@@ -223,6 +276,8 @@ done_lut:
 	
 ; Game Loop starts here!	
 GameStart:
+	lda #$01
+	sta $d6a6
 	lda #kernel.args.timer.FRAMES		; set the Timer to Frames
 	ora #kernel.args.timer.QUERY		; and query what frame we're on
 	sta kernel.args.timer.units			; store in units parameter
@@ -233,8 +288,9 @@ GameStart:
 skipSet:
 	jsr SetTimer						; Let's get the kernel set up for the timer
 
-loop:	
+loop:									; This is where we sit if not handling events 
 	jsr handle_events
+	jsr manage_traffic					; checks on cars location so see if they've left the screen
 	jmp loop
 
 handle_events:
@@ -292,6 +348,9 @@ jButton:
 jDone:
 	rts										
 
+
+
+
 ; These are events that happen at SOF, 60 times per second
 UpdateScreen:
 	jsr SetTimer						; Reset the next timer for SOF
@@ -299,12 +358,13 @@ UpdateScreen:
 ;update road							; Moving the Road by adjust the Tile Map
 	sec									; Set the carry for subtraction
 	lda roadMove						; load Road position (fixed decimal byte)
-	sbc player+8						; add player + 7 (player speed decimal Byte)
+	sbc player.speedLOW						; add player + 7 (player speed decimal Byte)
 	sta roadMove						; and store
 	lda roadMove+1						; load the low byte of road position (Tilemap Low)
-	sbc player+9						; add player + 8 (player speed byte)
+	sbc player.speedHI						; add player + 8 (player speed byte)
 	sta roadMove+1						; and save
 	sta VKY_TM0_POS_Y_L					; Write to Vicky Map Position Y, Low Byte
+	stx VKY_TM0_POS_Y_H
 
 ;update car position
 	lda joyX							; Get the X direction of the joystick
@@ -312,24 +372,24 @@ UpdateScreen:
 	bmi moveLeft						; if X direction is negative skip to move left
 moveRight:								
 	clc									; Clear the carry for addition			
-	lda player+1						; load player + 1 (x Position (L))
+	lda player.xLOW						; load player + 1 (x Position (L))
 	adc #$02							; move 2 pixels to the right
-	sta player+1						; and store
+	sta player.xLOW						; and store
 	sta VKY_SP0_POS_X_L					; Set the Vicky sprite 0 positiong L
-	lda player+2						; load player + 2 (x Position (H))
+	lda player.xHI						; load player + 2 (x Position (H))
 	adc #$00							; Add Carry if needed
-	sta player+2						; and store
+	sta player.xHI						; and store
 	sta VKY_SP0_POS_X_H					; set the Vicky Sprite 0 Position H
 	bra testY							; skip to test Y
 moveLeft:
 	sec 								; set the carry for subtraction
-	lda player+1						; load player + 1 (x Position (L))
+	lda player.xLOW						; load player + 1 (x Position (L))
 	sbc #$02							; move 2 pixels to the left
-	sta player+1						; and store
+	sta player.xLOW						; and store
 	sta VKY_SP0_POS_X_L					; set the Vicky sprite 0 position L
-	lda player+2						; load player + 2 (x Position (H))
+	lda player.xHI						; load player + 2 (x Position (H))
 	sbc #$00							; subtract carry if needed
-	sta player+2						; and store
+	sta player.xHI						; and store
 	sta VKY_SP0_POS_X_H					; set the Vicky Sprite 0 Position H
 
 ;Joystick Y controls speed
@@ -339,41 +399,113 @@ testY:
 	bpl slowDown						; if joystick is down, then slow down
 speedUp:
 	clc									; clear carry for addition
-	lda player+8						; load player + 7 (speed L)
+	lda player.speedLOW						; load player + 7 (speed L)
 	adc #$08							; Add $08
-	sta player+8						; asd store
-	lda player+9						; load player + 8 (speed H)
+	sta player.speedLOW						; asd store
+	lda player.speedHI						; load player + 8 (speed H)
 	adc #$00							; Add carry
 	cmp #$08							; If we hit 7, we hit top speed
 	beq topSpeed						; stop adding
-	sta player+9						; store if not over top speed
+	sta player.speedHI						; store if not over top speed
 	bra upDateTraffic						; we are done
 topSpeed:
 	sec 								; we've hit top speed so we need
-	lda player+8						; to subtract that speed low byte
+	lda player.speedLOW						; to subtract that speed low byte
 	sbc #$08
-	sta player+8
+	sta player.speedLOW
 	bra upDateTraffic						; done
 slowDown:
 	sec									; Set carry for subtraction to slow down
-	lda player+8						; load player speed L
-	sbc #$08 							; subtract 8
-	sta player+8						; and store
-	lda player+9						; load player speed H
+	lda player.speedLOW						; load player speed L
+	sbc #$10 							; subtract 16
+	sta player.speedLOW						; and store
+	lda player.speedHI						; load player speed H
 	sbc #$00							; subtract carry
 	bmi noSpeed							; Have we hit a negative number?
-	sta player+9						; if not, store the new speed
+	sta player.speedHI						; if not, store the new speed
 	bra upDateTraffic						; and done
 noSpeed:
-	stz player+8						; make sure all speed bytes are at zero since we're stopped
+	stz player.speedLOW						; make sure all speed bytes are at zero since we're stopped
 	bra upDateTraffic
 
-upDateTraffic:
+upDateTraffic:							; We need to set the traffic observable speed relative the the player's speed
+	ldx #$00							; X refers to which car are we updating.
+carsLoop:
+	stz MULU_B_H						; use the coprocessor multiplier to locate the appropriate bytes in the traffic LUT
+	stz MULU_A_H
+	stx MULU_A_L
+	lda #$10							; Each car in the traffic LUT uses 11 bytes
+	sta MULU_B_L
+	ldy MULU_LL							; Assign that location to Y
+	phx									; now push X on to the stack so we can use it for assigning 
+	lda #$08							; so we can use the multiplier to locate the sprite table Y pos
+	sta MULU_B_L
+	ldx MULU_LL							; Assign that location to X
+
+	lda player.speedHI						; determine if a car is going faster than the player
+	cmp traffic.speedHI,y						; start with the high byte
+	bcc addCarPlacement					; if car is slower, the sprite is traveling down the screen making it an addition problem
+	bne subtractCarPlacement			; if car is faster, the sprite is moving up the screen making a subtraction problem
+	lda player.speedLOW						; if High byte is equal, test the low byte
+	cmp traffic.speedLOW,y		
+	beq skipCarPlacement				; if car and player same speed, skip all math
+	bcc addCarPlacement					; if car is slower, moving down screen, an addition problem
+										; otherwise fall through the player car faster
+subtractCarPlacement:
+	sec									; Set up for subtraction
+	lda player.speedLOW						; load players Speed LOW
+	sbc traffic.speedLOW,y						; subtract a car's speed LOW
+	sta $80								; store temporarily
+	lda player.speedHI						; load player's speed HIGH
+	sbc traffic.speedHI,y						; subtract traffic speed HIGH
+	sta $81								; store temporarily
+
+	clc									; set up for new subtraction
+	lda traffic.yFRAC,y						; load traffic position FRACTION
+	adc $80								; subtract relative speed to player LOW
+	sta traffic.yFRAC,y						; store new traffic position FRACTION
+	lda traffic.yLOW,y						; load traffic Speed LOW
+	adc $81								; subtract relative speed to Player HIGH
+	sta traffic.yLOW,y						; and store
+	sta VKY_SP0_POS_Y_L+8,x				; also set the sprites Y LOW position
+	lda traffic.yHI,y						; load the traffic HIGH y Position
+	adc #$00							; and subtract the Carry
+	sta traffic.yHI,y						; and save
+	sta VKY_SP0_POS_Y_H+8,x				; set the sprite Y POS high
+	bra skipCarPlacement
+
+addCarPlacement:
+	sec									; Set up for subtraction
+	lda traffic.speedLOW,y						; load players Speed LOW
+	sbc player.speedLOW						; subtract a car's speed LOW
+	sta $80								; store temporarily
+	lda traffic.speedHI,y 					; load player's speed HIGH
+	sbc player.speedHI						; subtract traffic speed HIGH
+	sta $81								; store temporarily
+
+	sec									; set up for new subtraction
+	lda traffic.yFRAC,y						; load traffic position FRACTION
+	sbc $80								; subtract relative speed to player LOW
+	sta traffic.yFRAC,y						; store new traffic position FRACTION
+	lda traffic.yLOW,y						; load traffic Speed LOW
+	sbc $81								; subtract relative speed to Player HIGH
+	sta traffic.yLOW,y						; and store
+	sta VKY_SP0_POS_Y_L+8,x				; also set the sprites Y LOW position
+	lda traffic.yHI,y						; load the traffic HIGH y Position
+	sbc #$00							; and subtract the Carry
+	sta traffic.yHI,y						; and save
+	sta VKY_SP0_POS_Y_H+8,x				; set the sprite Y POS high
+
+skipCarPlacement:
+	plx									; we're done with a car's movement so let's pull X back from the stack
+	inx									; increment it by 1 to the next car
+	cpx #$07							; check to see if we've updated all the cars
+	beq doneCarsLoop
+	jmp carsLoop						; if not, loop again
 	
-
-
+doneCarsLoop:
+	;jsr manage_traffic
 	rts
-
 
 ; Set the timer to the next SOF for the Game Loop
 SetTimer:	
@@ -388,7 +520,60 @@ SetTimer:
 done:
 	rts
 
+manage_traffic:
+	ldx #$00
+trafficTestLoop:
+	stz MULU_B_H						; use the coprocessor multiplier to locate the appropriate bytes in the traffic LUT
+	stz MULU_A_H
+	stx MULU_A_L
+	lda #$10							; Each car in the traffic LUT uses 11 bytes
+	sta MULU_B_L
+	ldy MULU_LL							; Assign that location to Y
 
+	lda traffic.yHI,y 
+	bmi aboveScreen
+	beq doneCar
+	lda traffic.yLOW,y 
+	cmp #$15
+	bcc doneCar
+belowScreen:
+	lda #$00
+	sta traffic.yLOW,y
+	sta traffic.yHI,y
+	bra changeCar
+aboveScreen:
+	lda #$10
+	sta traffic.yLOW,y
+	lda #$01
+	sta traffic.yHI,y
+changeCar:
+	phx
+	lda $d6a4
+	and #$0f 
+	sta traffic.car,y 
+	asl
+	tax
+	lda carsImage,x 
+	sta $80
+	lda carsImage+1,x 
+	sta $81
+	lda traffic.sprite,y 
+	sta MULU_A_L
+	lda #$08
+	sta MULU_B_L
+	ldx MULU_LL
+	lda $80
+	sta VKY_SP0_AD_L,x 
+	lda $81
+	sta VKY_SP0_AD_M,x 
+	plx
+
+
+doneCar
+	inx
+	cpx #$07
+	bne trafficTestLoop
+	rts
 
 ; ***Working Memory***
 
@@ -397,32 +582,32 @@ totalColors:	.byte $00				; This is a variable for the y index for the CLUT load
 joyX:			.byte $00				; signed X direction
 joyY:			.byte $00				; signed Y direction
 joyB:			.byte $00				; Button 0 Activated?
-roadMove:		.byte $00,$00			; Low/High Road Movement Position
+roadMove:		.byte $80,$80			; Low/High Road Movement Position
 
 ; LUT for Traffic tracking. 12 cars at most?
 traffic:		; every time a car enters the screen we'll need to determine car type, driving style, speed, lane, etc
-;			Sprite,	X_POS_L,	X_POS_H,	Y_POS_FP,	Y_POS_L,	Y_POS_H,	car type,	current lane,	speed L,	speed H,	Driver type 
-;																														(1 Defensive, 2 aggressive, 3 racing, 4 police)
-	.byte	$01,	86,			$00,		$00,		$00,		$00,		$02,		$01,			$50,		$04,		$01
-	.byte	$02,	120,		$00,		$00,		$00,		$00,		$03,		$02,			$50,		$05,		$01	
-	.byte	$03,	152,		$00,		$00,		$00,		$00,		$03,		$03,			$70,		$04,		$01	
-	.byte	$04,	184,		$00,		$00,		$00,		$00,		$03,		$04,			$90,		$03,		$01	
-	.byte	$05,	216,		$00,		$00,		$00,		$00,		$03,		$05,			$60,		$04,		$01	
-	.byte	$06,	248,		$00,		$00,		$00,		$00,		$03,		$06,			$80,		$05,		$01	
-	.byte	$07,	86,			$00,		$00,		$00,		$00,		$03,		$01,			$00,		$00,		$01	
-	.byte	$08,	120,		$00,		$00,		$00,		$00,		$03,		$02,			$00,		$00,		$01	
-	.byte	$09,	152,		$00,		$00,		$00,		$00,		$03,		$03,			$00,		$00,		$01	
-	.byte	$0a,	184,		$00,		$00,		$00,		$00,		$03,		$04,			$00,		$00,		$01	
-	.byte	$0b,	216,		$00,		$00,		$00,		$00,		$03,		$05,			$00,		$00,		$01	
-	.byte	$0c,	248,		$00,		$00,		$00,		$00,		$03,		$06,			$00,		$00,		$01		
+;			Sprite,	X_POS_L, X_POS_H,	Y_POS_FP,	Y_POS_L,	Y_POS_H,	car type,	current lane,	speed L,	speed H,	SpeedTop,	collision boundry,		Driver type 
+;																																			(1 Defensive, 2 aggressive, 3 racing, 4 police)
+	.byte	$01,	86,		 $00,		$00,		$00,		$00,		$02,		$01,			$50,		$04,		$00,		$00,$00,$00,$00,		$01
+	.byte	$02,	120,	 $00,		$00,		$00,		$00,		$03,		$02,			$50,		$05,		$00,		$00,$00,$00,$00,		$01	
+	.byte	$03,	152,	 $00,		$00,		$00,		$00,		$03,		$03,			$70,		$04,		$00,		$00,$00,$00,$00,		$01	
+	.byte	$04,	184,	 $00,		$00,		$00,		$00,		$03,		$04,			$90,		$03,		$00,		$00,$00,$00,$00,		$01	
+	.byte	$05,	216,	 $00,		$00,		$00,		$00,		$03,		$05,			$60,		$04,		$00,		$00,$00,$00,$00,		$01	
+	.byte	$06,	248,	 $00,		$00,		$00,		$00,		$03,		$06,			$80,		$05,		$00,		$00,$00,$00,$00,		$01	
+	.byte	$07,	86,		 $00,		$00,		$00,		$00,		$03,		$01,			$00,		$00,		$00,		$00,$00,$00,$00,		$01	
+	.byte	$08,	120,	 $00,		$00,		$00,		$00,		$03,		$02,			$00,		$00,		$00,		$00,$00,$00,$00,		$01	
+	.byte	$09,	152,	 $00,		$00,		$00,		$00,		$03,		$03,			$00,		$00,		$00,		$00,$00,$00,$00,		$01	
+	.byte	$0a,	184,	 $00,		$00,		$00,		$00,		$03,		$04,			$00,		$00,		$00,		$00,$00,$00,$00,		$01	
+	.byte	$0b,	216,	 $00,		$00,		$00,		$00,		$03,		$05,			$00,		$00,		$00,		$00,$00,$00,$00,		$01	
+	.byte	$0c,	248,	 $00,		$00,		$00,		$00,		$03,		$06,			$00,		$00,		$00,		$00,$00,$00,$00,		$01		
 	
 player:
-	.byte	$00,	184,		$00,		$00,		220,		$00,		$01,		$07,			$00,		$00,		$00	
+	.byte	$00,	22,		 $01,		$00,		220,		$00,		$01,		$07,			$00,		$00,		$00,		$00,$00,$00,$00,		$00
 
 ;Sprite register info
 spriteLoadData:
 ;			CLUT0/ENABLE, ADD_L   , ADD_M,    ADD_H, X_L,X_H,  Y_L,Y_H,  
-	.byte 	$01,          <sprite1, >sprite1, $00,   184,  0,  204,  0
+	.byte 	$01,          <sprite1, >sprite1, $00,    22,  1,  204,  0
 	.byte	$01,          <sprite2, >sprite2, $00,    86,  0,  188,  0
 	.byte	$01,          <sprite3, >sprite3, $00,   120,  0,   50,  0
 	.byte 	$01,          <sprite4, >sprite4, $00,   152,  0,   75,  0
@@ -430,7 +615,11 @@ spriteLoadData:
 	.byte	$01,		  <sprite10,>sprite10,$00,   216,  0,  150,  0
 	.byte 	$01,		  <sprite7, >sprite7, $00,   248,  0,   60,  0
 
-
+carsImage:
+	.byte <sprite1,>sprite1,<sprite7,>sprite7,<sprite2,>sprite2,<sprite3,>sprite3
+	.byte <sprite4,>sprite4,<sprite5,>sprite5,<sprite6,>sprite6,<sprite7,>sprite7
+	.byte <sprite8,>sprite8,<sprite9,>sprite9,<sprite10,>sprite10,<sprite11,>sprite11
+	.byte <sprite12,>sprite12,<sprite10,>sprite10,<sprite3,>sprite3,<sprite9,>sprite9
 
 ;Image Data Starts here
 ;Palette Indexed Colors
@@ -1028,157 +1217,184 @@ sprite12:
 
 
 TileSet:
-;begin Sprite
-	.byte	$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
-	.byte	$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
-	.byte	$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
-	.byte	$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
-	.byte	$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
-	.byte	$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
-	.byte	$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
-	.byte	$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
-	.byte	$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
-	.byte	$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
-	.byte	$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
-	.byte	$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
-	.byte	$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
-	.byte	$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
-	.byte	$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
-	.byte	$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
-	.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$89,$89,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$89,$89,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$89,$89,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$89,$89,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$89,$89,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$89,$89,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$89,$89,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$89,$89,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$63,$63,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$63,$63,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$63,$63,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$63,$63,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$63,$63,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$63,$63,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$63,$63,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$63,$63,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$63,$63,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$63,$63,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$63,$63,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$63,$63,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$63,$63,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$63,$63,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$63,$63,$95,$95,$95,$95,$95,$95,$95
-	.byte	$95,$95,$95,$95,$95,$95,$95,$63,$63,$95,$95,$95,$95,$95,$95,$95
-	.byte	$4a,$4a,$48,$48,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$83,$83,$83,$95
-	.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$83,$83,$83,$95
-	.byte	$4a,$4a,$4e,$4e,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$83,$83,$83,$95,$95
-	.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4e,$4a,$83,$83,$83,$95,$95
-	.byte	$4a,$4a,$4a,$4a,$4a,$4a,$48,$4a,$4a,$4e,$4a,$4a,$83,$83,$83,$95
-	.byte	$4a,$4a,$48,$48,$4a,$4a,$48,$4a,$4a,$4a,$4a,$4a,$83,$83,$83,$83
-	.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$83,$83,$83
-	.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$48,$4a,$4a,$83,$83,$83
-	.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$48,$4a,$4a,$83,$83,$83
-	.byte	$4a,$4a,$4a,$4a,$48,$4a,$4e,$4e,$4a,$4a,$4a,$4a,$83,$83,$83,$83
-	.byte	$4a,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4a,$4a,$4a,$83,$83,$83,$83,$95
-	.byte	$4a,$4a,$4e,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$83,$83,$83,$83,$95
-	.byte	$4a,$4a,$4e,$4a,$4a,$4a,$4a,$48,$48,$4a,$4a,$83,$83,$83,$83,$95
-	.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$83,$83,$83,$95
-	.byte	$4a,$4a,$4a,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4a,$4a,$4a,$83,$83,$83
-	.byte	$4a,$48,$4a,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4a,$4a,$4a,$83,$83,$83
-	.byte	$4a,$48,$4a,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$83,$83
-	.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$83,$83
-	.byte	$4a,$4a,$4a,$4a,$48,$4e,$4e,$4e,$4a,$4a,$48,$48,$4a,$4a,$83,$83
-	.byte	$4e,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$83,$83
-	.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$83,$83
-	.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4a,$83,$83,$83
-	.byte	$4a,$48,$48,$4e,$4a,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4a,$83,$83,$95
-	.byte	$4a,$4a,$4a,$4e,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$83,$83,$95
-	.byte	$4a,$4a,$4a,$4e,$4a,$4a,$4a,$4a,$4a,$4e,$4a,$4a,$4a,$83,$83,$95
-	.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4e,$4a,$4a,$4a,$83,$83,$95
-	.byte	$48,$4a,$4a,$4a,$4a,$4a,$48,$48,$4a,$4e,$4a,$4a,$4a,$83,$83,$95
-	.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$83,$83,$83,$95
-	.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$83,$83,$95,$95
-	.byte	$4a,$4a,$4a,$4e,$4e,$4a,$48,$4a,$4a,$4a,$4a,$83,$83,$83,$83,$95
-	.byte	$4a,$4a,$4a,$4a,$4a,$4a,$48,$4a,$4e,$4a,$4a,$4a,$83,$83,$83,$95
-	.byte	$4a,$4a,$48,$48,$4a,$4a,$4a,$4a,$4e,$4a,$4a,$4a,$83,$83,$83,$95
-	.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
-	.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
-	.byte	$4a,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
-	.byte	$4a,$4a,$4a,$4a,$48,$4a,$4a,$4e,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4e
-	.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4e,$4a,$4a,$4a,$48,$48,$4a,$4a,$4a
-	.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
-	.byte	$4a,$4a,$48,$48,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
-	.byte	$4a,$4a,$4a,$4a,$4a,$4a,$48,$48,$4a,$4a,$4a,$4a,$4e,$4e,$4a,$4a
-	.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
-	.byte	$4a,$4a,$4e,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4a
-	.byte	$4a,$4a,$4e,$4a,$4a,$4a,$4a,$4e,$4e,$4a,$4a,$48,$4a,$4a,$4a,$48
-	.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
-	.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
-	.byte	$4a,$4a,$4a,$4e,$4e,$4a,$4a,$4a,$4a,$4a,$4a,$4e,$4e,$4a,$48,$4a
-	.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$48,$48,$4a,$4a,$4a,$4a,$4a,$48,$4a
-	.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
-	.byte	$95,$83,$83,$83,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$48,$48,$4a,$4a
-	.byte	$95,$83,$83,$83,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
-	.byte	$95,$95,$83,$83,$83,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4e,$4e,$4a,$4a
-	.byte	$95,$95,$83,$83,$83,$4a,$4e,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
-	.byte	$95,$83,$83,$83,$4a,$4a,$4e,$4a,$4a,$48,$4a,$4a,$4a,$4a,$4a,$4a
-	.byte	$83,$83,$83,$83,$4a,$4a,$4a,$4a,$4a,$48,$4a,$4a,$48,$48,$4a,$4a
-	.byte	$83,$83,$83,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
-	.byte	$83,$83,$83,$4a,$4a,$48,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
-	.byte	$83,$83,$83,$4a,$4a,$48,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
-	.byte	$83,$83,$83,$83,$4a,$4a,$4a,$4a,$4e,$4e,$4a,$48,$4a,$4a,$4a,$4a
-	.byte	$95,$83,$83,$83,$83,$4a,$4a,$4a,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4a
-	.byte	$95,$83,$83,$83,$83,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4e,$4a,$4a
-	.byte	$95,$83,$83,$83,$83,$4a,$4a,$48,$48,$4a,$4a,$4a,$4a,$4e,$4a,$4a
-	.byte	$95,$83,$83,$83,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
-	.byte	$83,$83,$83,$4a,$4a,$4a,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4a,$4a,$4a
-	.byte	$83,$83,$83,$4a,$4a,$4a,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4a,$48,$4a
-	.byte	$83,$83,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4a,$48,$4a
-	.byte	$83,$83,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
-	.byte	$83,$83,$4a,$4a,$48,$48,$4a,$4a,$4e,$4e,$4e,$48,$4a,$4a,$4a,$4a
-	.byte	$83,$83,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4e
-	.byte	$83,$83,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
-	.byte	$83,$83,$83,$4a,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
-	.byte	$95,$83,$83,$4a,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4a,$4e,$48,$48,$4a
-	.byte	$95,$83,$83,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4e,$4a,$4a,$4a
-	.byte	$95,$83,$83,$4a,$4a,$4a,$4e,$4a,$4a,$4a,$4a,$4a,$4e,$4a,$4a,$4a
-	.byte	$95,$83,$83,$4a,$4a,$4a,$4e,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
-	.byte	$95,$83,$83,$4a,$4a,$4a,$4e,$4a,$48,$48,$4a,$4a,$4a,$4a,$4a,$48
-	.byte	$95,$83,$83,$83,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
-	.byte	$95,$95,$83,$83,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
-	.byte	$95,$83,$83,$83,$83,$4a,$4a,$4a,$4a,$48,$4a,$4e,$4e,$4a,$4a,$4a
-	.byte	$95,$83,$83,$83,$4a,$4a,$4a,$4e,$4a,$48,$4a,$4a,$4a,$4a,$4a,$4a
-	.byte	$95,$83,$83,$83,$4a,$4a,$4a,$4e,$4a,$4a,$4a,$4a,$48,$48,$4a,$4a
-;end Sprite
+
+;begin TileSet
+.byte	$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
+.byte	$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
+.byte	$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
+.byte	$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
+.byte	$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
+.byte	$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
+.byte	$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
+.byte	$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
+.byte	$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
+.byte	$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
+.byte	$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
+.byte	$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
+.byte	$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
+.byte	$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
+.byte	$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
+.byte	$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0,$0
+
+.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
+
+.byte	$95,$95,$95,$95,$95,$95,$95,$89,$89,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$89,$89,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$89,$89,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$89,$89,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$89,$89,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$89,$89,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$89,$89,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$89,$89,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95,$95
+
+.byte	$95,$95,$95,$95,$95,$95,$95,$63,$63,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$63,$63,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$63,$63,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$63,$63,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$63,$63,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$63,$63,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$63,$63,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$63,$63,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$63,$63,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$63,$63,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$63,$63,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$63,$63,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$63,$63,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$63,$63,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$63,$63,$95,$95,$95,$95,$95,$95,$95
+.byte	$95,$95,$95,$95,$95,$95,$95,$63,$63,$95,$95,$95,$95,$95,$95,$95
+
+.byte	$4a,$4a,$48,$48,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$83,$83,$83,$95
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$83,$83,$83,$95
+.byte	$4a,$4a,$4e,$4e,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$83,$83,$83,$95,$95
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4e,$4a,$83,$83,$83,$95,$95
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$48,$4a,$4a,$4e,$4a,$4a,$83,$83,$83,$95
+.byte	$4a,$4a,$48,$48,$4a,$4a,$48,$4a,$4a,$4a,$4a,$4a,$83,$83,$83,$83
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$83,$83,$83
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$48,$4a,$4a,$83,$83,$83
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$48,$4a,$4a,$83,$83,$83
+.byte	$4a,$4a,$4a,$4a,$48,$4a,$4e,$4e,$4a,$4a,$4a,$4a,$83,$83,$83,$83
+.byte	$4a,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4a,$4a,$4a,$83,$83,$83,$83,$95
+.byte	$4a,$4a,$4e,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$83,$83,$83,$83,$95
+.byte	$4a,$4a,$4e,$4a,$4a,$4a,$4a,$48,$48,$4a,$4a,$83,$83,$83,$83,$95
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$83,$83,$83,$95
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4a,$4a,$4a,$83,$83,$83
+.byte	$4a,$48,$4a,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4a,$4a,$4a,$83,$83,$83
+
+.byte	$4a,$48,$4a,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$83,$83
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$83,$83
+.byte	$4a,$4a,$4a,$4a,$48,$4e,$4e,$4e,$4a,$4a,$48,$48,$4a,$4a,$83,$83
+.byte	$4e,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$83,$83
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$83,$83
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4a,$83,$83,$83
+.byte	$4a,$48,$48,$4e,$4a,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4a,$83,$83,$95
+.byte	$4a,$4a,$4a,$4e,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$83,$83,$95
+.byte	$4a,$4a,$4a,$4e,$4a,$4a,$4a,$4a,$4a,$4e,$4a,$4a,$4a,$83,$83,$95
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4e,$4a,$4a,$4a,$83,$83,$95
+.byte	$48,$4a,$4a,$4a,$4a,$4a,$48,$48,$4a,$4e,$4a,$4a,$4a,$83,$83,$95
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$83,$83,$83,$95
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$83,$83,$95,$95
+.byte	$4a,$4a,$4a,$4e,$4e,$4a,$48,$4a,$4a,$4a,$4a,$83,$83,$83,$83,$95
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$48,$4a,$4e,$4a,$4a,$4a,$83,$83,$83,$95
+.byte	$4a,$4a,$48,$48,$4a,$4a,$4a,$4a,$4e,$4a,$4a,$4a,$83,$83,$83,$95
+
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
+.byte	$4a,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
+.byte	$4a,$4a,$4a,$4a,$48,$4a,$4a,$4e,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4e
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4e,$4a,$4a,$4a,$48,$48,$4a,$4a,$4a
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
+.byte	$4a,$4a,$48,$48,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$48,$48,$4a,$4a,$4a,$4a,$4e,$4e,$4a,$4a
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
+.byte	$4a,$4a,$4e,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4a
+.byte	$4a,$4a,$4e,$4a,$4a,$4a,$4a,$4e,$4e,$4a,$4a,$48,$4a,$4a,$4a,$48
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
+.byte	$4a,$4a,$4a,$4e,$4e,$4a,$4a,$4a,$4a,$4a,$4a,$4e,$4e,$4a,$48,$4a
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$48,$48,$4a,$4a,$4a,$4a,$4a,$48,$4a
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
+
+.byte	$95,$83,$83,$83,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$48,$48,$4a,$4a
+.byte	$95,$83,$83,$83,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
+.byte	$95,$95,$83,$83,$83,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4e,$4e,$4a,$4a
+.byte	$95,$95,$83,$83,$83,$4a,$4e,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
+.byte	$95,$83,$83,$83,$4a,$4a,$4e,$4a,$4a,$48,$4a,$4a,$4a,$4a,$4a,$4a
+.byte	$83,$83,$83,$83,$4a,$4a,$4a,$4a,$4a,$48,$4a,$4a,$48,$48,$4a,$4a
+.byte	$83,$83,$83,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
+.byte	$83,$83,$83,$4a,$4a,$48,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
+.byte	$83,$83,$83,$4a,$4a,$48,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
+.byte	$83,$83,$83,$83,$4a,$4a,$4a,$4a,$4e,$4e,$4a,$48,$4a,$4a,$4a,$4a
+.byte	$95,$83,$83,$83,$83,$4a,$4a,$4a,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4a
+.byte	$95,$83,$83,$83,$83,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4e,$4a,$4a
+.byte	$95,$83,$83,$83,$83,$4a,$4a,$48,$48,$4a,$4a,$4a,$4a,$4e,$4a,$4a
+.byte	$95,$83,$83,$83,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
+.byte	$83,$83,$83,$4a,$4a,$4a,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4a,$4a,$4a
+.byte	$83,$83,$83,$4a,$4a,$4a,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4a,$48,$4a
+
+.byte	$83,$83,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4a,$48,$4a
+.byte	$83,$83,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
+.byte	$83,$83,$4a,$4a,$48,$48,$4a,$4a,$4e,$4e,$4e,$48,$4a,$4a,$4a,$4a
+.byte	$83,$83,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4e
+.byte	$83,$83,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
+.byte	$83,$83,$83,$4a,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
+.byte	$95,$83,$83,$4a,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4a,$4e,$48,$48,$4a
+.byte	$95,$83,$83,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4e,$4a,$4a,$4a
+.byte	$95,$83,$83,$4a,$4a,$4a,$4e,$4a,$4a,$4a,$4a,$4a,$4e,$4a,$4a,$4a
+.byte	$95,$83,$83,$4a,$4a,$4a,$4e,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
+.byte	$95,$83,$83,$4a,$4a,$4a,$4e,$4a,$48,$48,$4a,$4a,$4a,$4a,$4a,$48
+.byte	$95,$83,$83,$83,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
+.byte	$95,$95,$83,$83,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
+.byte	$95,$83,$83,$83,$83,$4a,$4a,$4a,$4a,$48,$4a,$4e,$4e,$4a,$4a,$4a
+.byte	$95,$83,$83,$83,$4a,$4a,$4a,$4e,$4a,$48,$4a,$4a,$4a,$4a,$4a,$4a
+.byte	$95,$83,$83,$83,$4a,$4a,$4a,$4e,$4a,$4a,$4a,$4a,$48,$48,$4a,$4a
+
+.byte	$4a,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
+.byte	$4a,$4a,$4a,$4a,$48,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4e,$4e,$4a,$4a,$4a
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4e,$4a,$4a,$4a,$4a,$4a,$4a,$4e
+.byte	$4a,$4a,$4a,$4a,$4e,$4a,$4a,$4a,$4e,$4a,$4a,$4a,$4a,$4a,$4a,$4a
+.byte	$4a,$48,$48,$4a,$4e,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$48,$48,$4a,$4a,$4a,$4e,$4e,$4a,$4a
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
+.byte	$4a,$4a,$4e,$4a,$4a,$4a,$4a,$4e,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
+.byte	$4a,$4a,$4e,$4a,$4a,$4a,$4a,$4e,$4a,$4a,$4a,$4a,$4a,$48,$48,$4a
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$48,$48,$4a,$4a,$4a,$4e,$4e,$4a,$4a,$4a
+.byte	$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$48,$4a
+.byte	$4a,$4a,$4e,$4e,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$4a,$48,$4a
+; end tileset
+
 
 ; We load the tilemap from a .tlm file made by Aseprite as binary data
 TileMapData:													;Because the emulator is a little different from the actual I have 2 tilemaps. Only one should be active.
-;	.binary "RetroRacerProject/RetroRacerTilemapA.tlm"			;For the emulator version
-	.binary "RetroRacerProject/RetroRacerTilemapB.tlm"			;For the actual computer
+;	.binary "RetroRacerTilemapA.tlm"							;For the emulator version
+	.binary "RetroRacerTilemapB.tlm"							;For the actual computer
 
 
 
