@@ -3,111 +3,7 @@
 ; 
 
 
-; Master Memory Unit
-MMU_IO_CTRL 	= $01						;MMU I/O Control
-
-; Vicky control
-VKY_MSTR_CTRL_0 = $d000						; Vicky Master Control Register 0
-VKY_MSTR_CTRL_1 = $d001						; Vicky Master Control Register 1
-VKY_BRDR_CTRL   = $d004						; Vicky Border Control Register
-
-; Vicky Background Color
-VKY_BKG_COL_B   = $d00d						; Vicky Graphics Background Color Blue
-VKY_BKG_COL_G   = $d00e						; Vicky Graphics Background Color Green
-VKY_BKG_COL_R   = $d00f						; Vicky Graphics Background Color Red
-
-; Vicky layer control
-VKY_LAYER_CTRL_0= $d002
-VKY_LAYER_CTRL_1= $d003
-
-; Tile Set Registers
-VKY_TS0_AD_L	= $d280						; Vicky Tile 0 Image Start Address LOW BYTE
-VKY_TS0_AD_M	= $d281						; Vicky Tile 0 Image Start Address MEDIUM BYTE
-VKY_TS0_AD_H	= $d282						; Vicky Tile 0 Image Start Address HIGH BYTE
-
-; Tile Map Registers
-VKY_TM0_CTRL	= $d20c						; Tile Map 0 Control
-VKY_TM0_AD_L	= $d20d						; Tile Map 0 Start Address LOW BYTE
-VKY_TM0_AD_M	= $d20e						; Tile Map 0 Start Address MEDIUM BYTE
-VKY_TM0_AD_H	= $d20f						; Tile Map 0 Start Address HIGH BYTE
-VKY_TM0_SZ_X	= $d210						; Tile Map 0 Size X
-VKY_TM0_SZ_Y	= $d212						; Tile Map 0 Size Y
-VKY_TM0_POS_X_L = $d214						; Tile Map 0 X Position & Scroll LOW BYTE
-VKY_TM0_POS_X_H = $d215						; Tile Map 0 X Position & Scroll HIGH BYTE
-VKY_TM0_POS_Y_L = $d216						; Tile Map 0 Y Position & Scroll LOW BYTE
-VKY_TM0_POS_Y_H = $d217						; Tile Map 0 Y Position & Scroll HIGH BYTE
-
-; Sprite registers							; we're starting a $0a for cars in case we want something in front of them (explosions or ???)
-VKY_SPa_CTRL	= $D950						; Sprite 0a Control Register
-VKY_SPa_AD_L   	= $D951						; Sprite 0a Pixel Data Address Register
-VKY_SPa_AD_M   	= $D952
-VKY_SPa_AD_H   	= $D953
-VKY_SPa_POS_X_L = $D954						; Sprite 0a X Position Register
-VKY_SPa_POS_X_H = $D955
-VKY_SPa_POS_Y_L = $D956						; Sprite 0a X Position Register
-VKY_SPa_POS_Y_H = $D957
-
-; Vicky Color Look Up Table Regsiters
-VKY_GR_CLUT_0  	= $d000						; Graphics LUT #0 in I/O page 1
-VKY_GR_CLUT_1  	= $d400						; Graphics LUT #1 in I/O page 1
-
-; Interrupt Registers
-VIRQ			= $fffe						; Pointer to IRQ routine (LOW Byte)
-INT_PEND_0		= $d660						; Pending register for interrupts 0-7
-INT_PEND_1		= $d661						; Pending register for interrupts 8-15
-INT_MASK_0		= $d66c						; Mask register for interrupts 0-7
-INT_MASK_1		= $d66d						; Mask register for interrupts 8-15
-
-; Math Coprocessor
-MULU_A_L		= $de00						; unsigned A LOW byte
-MULU_A_H		= $de01						; unsigned A HIGH Byte
-MULU_B_L		= $de02						; unsigned B LOW byte
-MULU_B_H		= $de03						; unsigned B HIGH byte
-MULU_LL			= $de10						; A x B byte 0
-MULU_LH			= $de11						; A x B byte 1
-MULU_HL			= $de12						; A x B byte 3
-MULU_HH			= $de13						; A x B byte 4
-
-; Misc Variables for Indirect Indexing
-ptr_src			= $80						; A pointer to read data
-ptr_dst			= $82						; A pointer to write data
-
-player.sprite	= player					; The sprite number 
-player.xLOW		= player+1					; sprite x position low
-player.xHI		= player+2					; sprite x position High
-player.yFRAC	= player+3					; sprite y position fixed point decimal
-player.yLOW		= player+4					; sprite y position low
-player.yHI		= player+5					; sprite y position High
-player.car		= player+6					; car image data (which art to use)
-player.lane		= player+7					; current lane car occupies
-player.speedLOW	= player+8					; car speed Low byte
-player.speedHI	= player+9					; car speed High byte
-player.speedTOP	= player+10					; car top speed (based on car type)
-player.xTL		= player+11					; top left boundry box for collision detection
-player.yTL		= player+12					; top left boundry box for collision detection
-player.xBR		= player+13					; bottom right boundry box for collision detection
-player.yBR		= player+14					; bottom right boundry box for collision detection
-player.AI 		= player+15					; Car AI 1, defensive, 2 aggressive, 3 racing, 4 police
-
-traffic.sprite	= traffic					; The sprite number 
-traffic.xLOW	= traffic+1					; sprite x position low
-traffic.xHI		= traffic+2					; sprite x position High
-traffic.yFRAC	= traffic+3					; sprite y position fixed point decimal
-traffic.yLOW	= traffic+4					; sprite y position low
-traffic.yHI		= traffic+5					; sprite y position High
-traffic.car		= traffic+6					; car image data (which art to use)
-traffic.lane	= traffic+7					; current lane car occupies
-traffic.speedLOW= traffic+8					; car speed Low byte
-traffic.speedHI	= traffic+9					; car speed High byte
-traffic.speedTOP= traffic+10				; car top speed (based on car type)
-traffic.xTL		= traffic+11				; top left boundry box for collision detection
-traffic.yTL		= traffic+12				; top left boundry box for collision detection
-traffic.xBR		= traffic+13				; bottom right boundry box for collision detection
-traffic.yBR		= traffic+14				; bottom right boundry box for collision detection
-traffic.AI 		= traffic+15				; Car AI 1, defensive, 2 aggressive, 3 racing, 4 police
-
-;.enc 										; set text encoding to screen graphics (for the C64 - F256k similar with letters/numbers)
-
+.include "RetroRacerInit.asm"				; all of our initial settings
 .cpu "w65c02"								; set the cpu to Western Digital 65C02
 
 *=$a0										; Set up buffer for Kernel communication
@@ -117,9 +13,16 @@ traffic.AI 		= traffic+15				; Car AI 1, defensive, 2 aggressive, 3 racing, 4 po
 *=$2000										; Our regular code goes here
 .dsection code								; define that section of code
 
-*=$2000		
-start:										; Start of the program
-	.include "api.asm"						; This is the Kernel API for communication
+*=$1ffd
+
+start:										; ***TEMP CODE FOR PROGRAMMING***
+		jmp SC								; Start of the program - We put this jump here so you can load the PGZ into the computer.
+											; With the self running code below, you can boot into it in RAM. Without this jump, loading a PGZ will
+											; hit the self running code the kernel needs at the start of the slot at $2000 and look like a freeze.
+											; hitting the reset on the back of the F256k will start the program.
+
+
+		.include "api.asm"					; This is the Kernel API for communication
 
 ;SetupKernel:								; Set up the API to work with
 
@@ -129,16 +32,17 @@ event:	.dstruct	kernel.event.event_t
 
 
 
-*=$2000
-; Self running code to send via USB port the F256. Saving wear and tear on the memory card slot.
-; dipswitch 1 should be set to on.
+*=$2000										; ***TEMP CODE FOR PROGRAMMING***
+											; Self running code to send via USB port the F256. Allows me to quickly load into emulator
+											; dipswitch 1 should be set to on.
 		.byte $f2,$56						; Required bytes for the Kernel to identify
 		.byte $04,$01						; how big is the program in 8K sections, What slot to map to
 		.byte $0b,$20						; the starting address of your program
 		.byte $00,$00,$00,$00				; reserved
 		.byte $00							; terminating byte
 
-; My program starts here!	
+											; *****My program starts here!*****
+SC:
 		stz MMU_IO_CTRL						; should do this on every program
 		jsr clearTextScreen
 
@@ -183,7 +87,7 @@ event:	.dstruct	kernel.event.event_t
 		sta VKY_TM0_CTRL					;										   | 0| 0| 0| 0| 0| 0| 0| 1|
 		lda #20								; Tile Map Size 20 X 
 		sta VKY_TM0_SZ_X
-		lda #200							; Tile Map Size 200 Y
+		lda #200							; Tile Map Size 200 Y	This is really long so we need to add some more scenery.
 		sta VKY_TM0_SZ_Y
 
 		lda #<TileMapData					; Point to the Tile Map Data, LOW BYTE
@@ -212,34 +116,8 @@ event:	.dstruct	kernel.event.event_t
 	
 		lda #$00							; Set the I/O page back to 0
 		sta MMU_IO_CTRL
-	
-;Set up Sprites
-init_spites:
-		
-		lda #$01
-		sta VKY_SPa_CTRL
-		ldx #<Corvair
-		ldy #>Corvair
-		stx VKY_SPa_CTRL+1
-		sty VKY_SPa_CTRL+2
-		stz VKY_SPa_CTRL+3
-		ldx #22
-		ldy #1
-		stx VKY_SPa_CTRL+4
-		sty VKY_SPa_CTRL+5
-		ldx #204
-		stx VKY_SPa_CTRL+6
-		stz VKY_SPa_CTRL+7
+		jmp init_spites
 
-		lda #$01
-		sta VKY_SPa_CTRL+8
-		sta VKY_SPa_CTRL+16
-		sta VKY_SPa_CTRL+24
-		sta VKY_SPa_CTRL+32
-		sta VKY_SPa_CTRL+40
-		sta VKY_SPa_CTRL+48
-		jmp GameStart
-	
 ; Color LUT loop. used for multiple LUTS if you have more than 1
 makeClut:
 		sty totalColors
@@ -263,7 +141,7 @@ comp_loop:
 		lda ptr_src+1
 		adc #$00
 		sta ptr_src+1
-	
+
 		clc									; Move the destination pointer to the next Color
 		lda ptr_dst
 		adc #$04
@@ -271,15 +149,65 @@ comp_loop:
 		lda ptr_dst+1
 		adc #$00
 		sta ptr_dst+1
-	
+
 		jmp color_loop						; and start copying the next color
 done_lut:
 		rts
 	
+
+
+		
+;Set up Sprites
+init_spites:								; Kind of a stub here (brute force settings)
+		
+		lda #$01							; Enable the Random Number Generator
+		sta Random_Reg
+		lda #$01							; Sprite $0a is the players car so we'll
+		sta VKY_SPa_CTRL					; initialize and position it here.
+		lda Random_L
+		and #$03
+		clc 
+		sta $80
+		adc $80
+		adc $80
+		tax
+		lda carsInfo,x					; We're starting with the Corvair
+		sta VKY_SPa_AD_L
+		lda carsInfo+1,x
+		sta VKY_SPa_AD_M
+		stz VKY_SPa_AD_H
+		lda carsInfo+2,x
+		sta player.speedTop
+
+		ldx #22								; This is the right shoulder on the road
+		ldy #1
+		stx VKY_SPa_POS_X_L
+		stx player.xLOW
+		sty VKY_SPa_POS_X_H
+		sty player.xHI
+		ldx #204							; towards the bottom of the screen
+		stx VKY_SPa_POS_Y_L
+		stx player.yLOW
+		stz VKY_SPa_POS_Y_H
+		stz player.yHI
+		stz player.yFRAC
+		stz player.speedLOW
+		stz player.speedHI
+
+		lda #$01							; Traffic starts at sprite $0b, let's just initialize them all.
+		sta VKY_SPa_CTRL+8					; $0b
+		sta VKY_SPa_CTRL+16					; $0c
+		sta VKY_SPa_CTRL+24					; $0d
+		sta VKY_SPa_CTRL+32					; $0e
+		sta VKY_SPa_CTRL+40					; $0f
+		sta VKY_SPa_CTRL+48					; $10
+		jmp GameStart
+	
+
+	
 ; We set up the kernel timer here for the initial SOF
 GameStart:
-		lda #$01							; Enable the Random Number Generator
-		sta $d6a6
+
 		lda #kernel.args.timer.FRAMES		; set the Timer to Frames
 		ora #kernel.args.timer.QUERY		; and query what frame we're on
 		sta kernel.args.timer.units			; store in units parameter
@@ -308,7 +236,38 @@ GameLoop:									; This is where we sit if not handling events
 		jsr manage_traffic					; checks on cars location so see if they've left the screen
 		jsr handle_events					; we'll check the handler in between other code so it doesn't need to wait if we hit SOF
 		jsr Speedometer						; print the speed at the bottom of the screen
+		jsr handle_events
+		jsr collisionCheck					; Check for any collisions with traffic
+		jsr handle_events
+		jsr checkHits						; Check to see how many collisions and react 
+		jsr handle_events
+		lda GO
+		bne endGame
 		jmp GameLoop
+
+endGame:
+		stz VKY_SPa_CTRL+8					; $0b
+		stz VKY_SPa_CTRL+16					; $0c
+		stz VKY_SPa_CTRL+24					; $0d
+		stz VKY_SPa_CTRL+32					; $0e
+		stz VKY_SPa_CTRL+40					; $0f
+		stz VKY_SPa_CTRL+48					; $10
+waitLoop:
+		jsr Speedometer
+		jsr handle_events
+		lda joyB
+		beq waitLoop
+		stz oldHit
+		stz hit
+		stz smoke
+		stz GO
+		lda #$3c 
+		sta gTimeHI
+		sta gTimeLO
+		jmp init_spites
+
+
+
 
 handle_events:
 		lda kernel.args.events.pending		; Peek at the queue to see if anything is pending
@@ -335,6 +294,8 @@ setJoyStick:
 		stz joyX							; reset all directions and button to zero
 		stz joyY
 		stz joyB
+		lda GO
+		bne jButton
 jUp:
 		lda $d8								; reload joystick state
 		and #$01							; check for up
@@ -371,6 +332,8 @@ jDone:
 ; These are events that happen at SOF, 60 times per second
 UpdateScreen:
 		jsr SetTimer						; Reset the next timer for SOF
+		jsr updateClock
+		stz hitFlag							; clear the collision flag so we can test for collisions again
 
 ;update road								; Moving the Road by adjust the Tile Map
 		sec									; Set the carry for subtraction
@@ -384,36 +347,66 @@ UpdateScreen:
 		stz VKY_TM0_POS_Y_H
 
 ;update car position
+		clc
+		lda player.speedLOW
+		adc player.speedHI
+		beq placeX
+		
 		lda joyX							; Get the X direction of the joystick
-		beq	testY							; do nothing if no direction
+		beq	placeX							; do nothing if no direction
 		bmi moveLeft						; if X direction is negative skip to move left
 moveRight:								
 		clc									; Clear the carry for addition			
 		lda player.xLOW						; load player + 1 (x Position (L))
 		adc #$02							; move 2 pixels to the right
 		sta player.xLOW						; and store
-		sta VKY_SPa_POS_X_L					; Set the Vicky sprite 0 positiong L
 		lda player.xHI						; load player + 2 (x Position (H))
 		adc #$00							; Add Carry if needed
 		sta player.xHI						; and store
-		sta VKY_SPa_POS_X_H					; set the Vicky Sprite 0 Position H
-		bra testY							; skip to test Y
+		bra placeX							; skip to test Y
 moveLeft:
 		sec 								; set the carry for subtraction
 		lda player.xLOW						; load player + 1 (x Position (L))
 		sbc #$02							; move 2 pixels to the left
 		sta player.xLOW						; and store
-		sta VKY_SPa_POS_X_L					; set the Vicky sprite 0 position L
 		lda player.xHI						; load player + 2 (x Position (H))
 		sbc #$00							; subtract carry if needed
 		sta player.xHI						; and store
+
+placeX:
+
+		lda player.xHI						; We want to check to see if we're trying to go offroad
+		bne _testRight						; if xHI is zero we're checking the left side, != Zero the right
+_testLeft:
+		lda player.xLOW						; Load xLOW and compare with 3f (left curb)
+		cmp #$3f
+		bcs _placeSprite					; if we're greater, no problem, place the sprite
+		clc
+		adc #$03							; if we're into the grass shift sprite right 3 pixels
+		sta player.xLOW
+		bra _placeSprite					; and place the sprite
+_testRight:
+		lda player.xLOW						; load xLOW and compare with $26 (right curb)
+		cmp #$26
+		bcc _placeSprite					; if we're less, no problem, place the sprite
+		sec
+		sbc #$03							; if we're into the grass, shift sprite 3 pixels to the left
+		sta player.xLOW
+
+_placeSprite:
+		lda player.xLOW
+		sta VKY_SPa_POS_X_L					; set the Vicky sprite 0 position L
+		lda player.xHI 
 		sta VKY_SPa_POS_X_H					; set the Vicky Sprite 0 Position H
+
+
 
 ;Joystick Y controls speed
 testY:
+
 		lda joyY							; Load Joystick Y position
-		beq upDateTraffic					; if no position, we are done
-		bpl slowDown						; if joystick is down, then slow down
+		beq slowDown						; if no position, we are done
+		bpl brake							; if joystick is down, then slow down
 speedUp:
 		clc									; clear carry for addition
 		lda player.speedLOW					; load player + 7 (speed L)
@@ -432,6 +425,16 @@ topSpeed:
 		sta player.speedLOW
 		bra upDateTraffic					; done
 slowDown:
+		sec									; Set carry for subtraction to slow down
+		lda player.speedLOW					; load player speed L
+		sbc #$03							; subtract 16
+		sta player.speedLOW					; and store
+		lda player.speedHI					; load player speed H
+		sbc #$00							; subtract carry
+		bmi noSpeed							; Have we hit a negative number?
+		sta player.speedHI					; if not, store the new speed
+		bra upDateTraffic					; and done
+brake:
 		sec									; Set carry for subtraction to slow down
 		lda player.speedLOW					; load player speed L
 		sbc #$10 							; subtract 16
@@ -528,7 +531,7 @@ skipCarPlacement:							; kind of a stub for horizontal placement of traffic
 
 		plx									; we're done with a car's movement so let's pull X back from the stack
 		inx									; increment it by 1 to the next car
-		cpx #$07							; check to see if we've updated all the cars
+		cpx #$06							; check to see if we've updated all the cars
 		beq doneCarsLoop
 		jmp carsLoop						; if not, loop again
 	
@@ -546,6 +549,26 @@ SetTimer:
 		jsr kernel.Clock.SetTimer			; jsr to Kernel routine to set timer
 		rts
 
+updateClock:
+		sec
+		lda gTimeLO 
+		sbc #$01
+		sta gTimeLO
+		lda gTimeHI
+		sbc #$00
+		sta gTimeHI
+		bmi setGameOver
+		lda gTimeLO
+		bmi mk60
+		rts
+mk60:
+		lda #$3c
+		sta gTimeLO
+		rts
+setGameOver:
+		inc GO
+		rts
+
 manage_traffic:
 		ldx #$00
 trafficTestLoop:
@@ -558,15 +581,17 @@ trafficTestLoop:
 
 		lda traffic.yHI,y 					; Load the car Y,High value
 		bmi aboveScreen						; if negative, we've gone off the top of the screen
-		beq doneCar							; if zero, there is no need to change the car
+		beq doneCarJmp						; if zero, there is no need to change the car
 		lda traffic.yLOW,y 					; if other than zero, (presumably 1), check the Low value to see if we've gone off the bottom of the scren
 		cmp #$15							; a value of $01 10 takes us completely off the screen so let's check for $01 15 for a little leaway
-		bcc doneCar							; if less, than there's nothing to do yet
+		bcc doneCarJmp						; if less, than there's nothing to do yet
 belowScreen:
 		lda #$00							; we've gone off the bottom of the screen so set the Low and High values to Zero to put the car
 		sta traffic.yLOW,y					; position on top of the screen. 
 		sta traffic.yHI,y			
 		bra changeCar						; and jump to change the car type so it seems like we have new traffic ahead of us
+doneCarJmp:
+		jmp doneCar
 aboveScreen:
 		lda #$10							; the car has gone off the top of the screen se we need to change the car position	
 		sta traffic.yLOW,y					; to the bottom of the screen. $01 10 is just below visable, but not past our check to see
@@ -574,15 +599,26 @@ aboveScreen:
 		sta traffic.yHI,y					; we will also just fall through to change the car below.
 changeCar:
 		phx									; push x onto the stack since we need it for indexing and we're already using it to track which car we're working on
-		lda $d6a4							; get a random number from the F256 random number generator
+		lda Random_L						; get a random number from the F256 random number generator
 		and #$0f 							; reduce it to 0 through 15
 		sta traffic.car,y 					; this is our new car in traffic, store this number
-		asl									; do a bit shift left o multiply by two so we can index the sprite art location
+		asl									; do a bit shift left to multiply by two so we can index the sprite art location
 		tax									; transer to x for indexing
 		lda carsImage,x 					; load the sprite location from the carsImage table Low
 		sta $80								; and store in a temp location
 		lda carsImage+1,x 					; load the sprite location from the carsIMage table High
 		sta $81								; and store in a temp location
+		txa 								; transfer x back to a
+		asl									; and double it again
+		tax									; and transfer back to x
+		lda hitBox,x						; now get the Top Right corner of the car's Collision Bounding Box
+		sta traffic.xTL,y					; and store in the traffic look up table
+		lda hitBox+1,x 
+		sta traffic.yTL,y
+		lda hitBox+2,x 						; get the bottem right corner of the car's Collision Bounding Box
+		sta traffic.xBR,y 					; and store it in the traffic look up table
+		lda hitBox+3,x 
+		sta traffic.yBR,y 
 		lda traffic.sprite,y 				; Get the sprite hardware number we are using from the traffic table
 		sta MULU_A_L						; and multiply it by 8 to get to the right sprite register locations
 		lda #$08							; using the coprocessor 
@@ -595,17 +631,335 @@ changeCar:
 		lda traffic.lane,y
 		asl 
 		tax
+
+		lda Random_L						; We want variation with cars in their lanes so the player can't split lanes
+		sta $80								; so we're going to get a random number and reduce it to 4 bits.	
+		and #$04							; bit 3 will determine if we're left or right of center
+		beq _less							; The other 2 bits will determine how many pixels off center
+		lda $80
+		and #$03
+		sta $80	
+		clc									; this moves the the car 1 to 3 pixels right
 		lda laneData,x 
-		sta traffic.xLOW,y
-		lda laneData+1,x
-		sta traffic.xHI,y
+		adc $80
+		sta traffic.xLOW,y 
+		lda laneData+1,x 
+		adc #$00
+		sta traffic.xHI,y 
+		bra selectSpeed
+_less:										; This moves the car 1 to 3 pixel left
+		lda $80
+		and #$03
+		sta $80
+		sec
+		lda laneData,x 
+		sbc $80
+		sta traffic.xLOW,y 	
+		lda laneData+1,x 
+		sbc #$00
+		sta traffic.xHI,y 
+
+selectSpeed:
+		lda Random_L						; Select a speed between 55mph and 79mph - start with a fractional random number
+		sta MULU_A_L
+		stz MULU_A_H
+		lda #$18							; multiply by $18 - which is a difference of 24mph
+		sta MULU_B_L						
+		stz MULU_B_H
+		clc
+		lda MULU_LH							; get the LH byte from the multiplier, but treat it as a LOW byte since we used a fractional multiplier
+		adc #$37							; add $37 - which is 55mph
+		sta $80								; store temp on zero page
+		stz $81								; clear the another zero page
+		asl $80								; and do 4 shifts left carrying the hi bit from the LOW to HI byte
+		rol $81								; this gets us out speed - since we're using a 4bit fixed point number for LOW
+		asl $80
+		rol $81 
+		asl $80 
+		rol $81 
+		asl $80
+		rol $81 
+		lda $80
+		sta traffic.speedLOW,y 				; store in the traffic table
+		lda $81
+		sta traffic.speedHI,y
+
 		plx									; pull off the stack the value of X for what car in traffic we are dealing with
 		
 doneCar
 		inx									; increment x to get to the next car
-		cpx #$07							; did we check all the cars?
-		bne trafficTestLoop					; no, loop around to do the next car
-		rts									; yes, return to the game loop
+		cpx #$06							; did we check all the cars?
+		beq doneTrafficLoop					; yes, return to the game loop
+		jmp trafficTestLoop					; No, loop around to do the next car
+doneTrafficLoop:
+		rts	
+
+collisionCheck:
+		lda hitFlag							; check to see if we already have a collision. If so we need to wait for screen
+		beq _okayToTest						; update to clear the flag since we hit this routine outside the SOF routines.
+		rts									; return to game loop if the flag is already set
+_okayToTest:
+		jsr clearAdder						; Clear the co-processor adder for some math
+		ldx player.xTL						; get the car collision boundry
+		ldy player.xLOW						; and add it to the actual sprite position
+		lda player.xHI						; to get the top left, bottom right coordinates
+		jsr collisionAdd
+		sta playerLeft_L					; store them in memory to do comparison with all
+		stx playerLeft_H 					; the traffic later in the routine
+		ldx player.xBR
+		lda player.xHI
+		jsr collisionAdd
+		sta playerRight_L 
+		stx playerRight_H
+		jsr clearAdder
+		ldx player.yTL
+		ldy player.yLOW
+		lda player.yHI
+		jsr collisionAdd
+		sta playerTop_L
+		stx playerTop_H 	
+		ldx player.yBR
+		lda player.yHI
+		jsr collisionAdd	
+		sta playerBot_L
+		stx playerBot_H
+	
+checkTraffic:
+		ldx #$00
+collisionTestLoop:
+		stz MULU_B_H						; use the coprocessor multiplier to locate the appropriate bytes in the traffic LUT
+		stz MULU_A_H
+		stx MULU_A_L
+		lda #$10							; Each car in the traffic LUT uses 16 bytes
+		sta MULU_B_L
+		ldy MULU_LL							; Assign that location to Y
+
+		jsr clearAdder						; Like the player's car we are calculating the hit box in real space on the
+		lda traffic.xTL,y 					; screen for all four corners of the car.
+		sta ADD_A_LL						; These will be saved on ZP for fast access.
+		lda traffic.xLOW,y 
+		sta ADD_B_LL
+		lda traffic.xHI,y 
+		sta ADD_B_LH
+		
+		lda ADD_R_LL						; X LEFT
+		sta trafficLeft_L
+		lda ADD_R_LH
+		sta trafficLeft_H
+
+		lda traffic.xBR,y 					; X Right
+		sta ADD_A_LL
+		lda ADD_R_LL
+		sta trafficRight_L
+		lda ADD_R_LH
+		sta trafficRight_H
+
+		jsr clearAdder
+		lda traffic.yTL,y 
+		sta ADD_A_LL
+		lda traffic.yLOW,y 
+		sta ADD_B_LL
+		lda traffic.yHI,y 
+		sta ADD_B_LH
+		
+		lda ADD_R_LL						; Y Top
+		sta trafficTop_L
+		lda ADD_R_LH
+		sta trafficTop_H
+
+		lda traffic.yBR,y					; Y Bottom 
+		sta ADD_A_LL
+		lda ADD_R_LL
+		sta trafficBot_L
+		lda ADD_R_LH
+		sta trafficBot_H
+
+compHitBoxes:								; we calculate a collision between the player and one of the traffic cars
+		lda trafficBot_H					; by testing to see if we miss in all four directions.
+		cmp playerTop_H						; if we fall all these tests, we end up with a hit.
+		bne _skipLO1						; all tests are 16 bit because we use the full screen.
+		lda trafficBot_L					; This first test is to see if traffic is above the player. 
+		cmp playerTop_L
+_skipLO1:
+		bcc nextCollisionTest				; traffic is above player, skip the rest of the test and go to the next car.
+
+		lda playerBot_H						; Check if traffic is below the player
+		cmp trafficTop_H
+		bne _skipLO2
+		lda playerBot_L
+		cmp trafficTop_L
+_skipLO2:
+		bcc nextCollisionTest				; skip if below player and go to the next car
+
+		lda playerRight_H 					; See if traffic is to the right of the player
+		cmp trafficLeft_H
+		bne _skipLO3
+		lda playerRight_L 
+		cmp trafficLeft_L 
+_skipLO3:
+		bcc nextCollisionTest				; Skip if traffic is to the right of the player
+
+		lda trafficRight_H 					; check to see if traffic is to the left of the player
+		cmp playerLeft_H 
+		bne _skipLO4
+		lda trafficRight_L 
+		cmp playerLeft_L 
+_skipLO4:
+		bcc nextCollisionTest				; Skip hit, and got to next car.
+
+		inc hitFlag							; set hitFlag to 1 to stop collision testing until after the next screen update
+		inc hit								; we failed the tests above se we have hit another car, increment the hit counter
+
+		lda player.xHI						; now we check if player is right or left of traffic car
+		cmp traffic.xHI,y
+		bne _skipLO5
+		lda player.xLOW
+		cmp traffic.xLOW,y
+_skipLO5:
+		bcc bumpRight						; and we adjust traffic accordingly
+		bra bumpLeft
+bumpReturn:
+
+		lda player.yHI						; now we check if player is in front or behind traffic car
+		cmp traffic.yHI,y 
+		bne _skipLO6
+		lda player.yLOW
+		cmp traffic.yLOW,y 
+_skipLO6:
+		bcc _bumpDown						; and adjust accordingly.
+		bra bumpUP
+_bumpDown:
+		jmp bumpDown
+
+bumpReturn2:
+
+nextCollisionTest:
+		inx									; increment x by one to set test for next traffic car.
+		cpx #$06							; have we tested all the cars?
+		beq doneCollisionCheck				; yes, but jumping up is too far, so jump down
+		jmp collisionTestLoop				; no, jump back up to next test
+doneCollisionCheck:
+		rts									; we are done with collision check. Either we've gone through all the cars, or we hit one.
+
+bumpLeft:									; left of player hits right of traffic
+		clc									; player car shifts 6 pixels right
+		lda player.xLOW
+		adc #$06
+		sta player.xLOW
+		lda player.xHI
+		adc #$00
+		sta player.xHI
+
+		sec									; traffic car shifts 1 pixel left
+		lda traffic.xLOW,y 
+		sbc #$01
+		sta traffic.xLOW,y 
+		lda traffic.xHI,y 
+		sbc #$00
+		sta traffic.xHI,y 
+		bra bumpReturn 
+
+bumpRight:									; Right of player hits left of traffic
+		sec									; player car shifts 6 pixels left
+		lda player.xLOW
+		sbc #$06
+		sta player.xLOW
+		lda player.xHI
+		sbc #$00
+		sta player.xHI
+
+		clc 								; traffic car shifts 1 pixel right
+		lda traffic.xLOW,y 
+		adc #$01
+		sta traffic.xLOW,y 
+		lda traffic.xHI,y 
+		adc #$00
+		sta traffic.xHI,y 
+		bra bumpReturn 
+
+bumpUp:										; player car behind traffic car
+		sec									; player car slows down
+		lda player.speedLOW
+		sbc #$50
+		sta player.speedLOW
+		lda player.speedHI
+		sbc #$00
+		bmi skipZero
+		stz player.speedLOW
+		stz player.speedHI
+skipZero:		
+		sta player.speedHI
+
+		sec 								; traffic car gets bumped a forward 6 pixels
+		lda traffic.yLOW,y 
+		sbc #$06
+		sta traffic.yLOW,y 
+		lda traffic.yHI,y 
+		sbc #$00
+		sta traffic.yHI,y 
+		jmp bumpReturn2
+
+bumpDown:
+
+		clc 								; player car hit from behind
+		lda traffic.yLOW,y 					; player car maintains speed
+		adc #$06							; traffic car gets bumped back 6 pixels
+		sta traffic.yLOW,y 
+		lda traffic.yHI,y 
+		adc #$00
+		sta traffic.yHI,y 
+		jmp bumpReturn2
+
+
+collisionAdd:								; Down and dirty add sequence instead of typing it 4 times.
+		stx ADD_A_LL						; takes extra time though
+		sty ADD_B_LL
+		sta ADD_B_LH
+		lda ADD_R_LL
+		ldx ADD_R_LH
+		rts
+
+checkHits:									; Hit Check stub
+		lda hit
+		cmp oldHit
+		beq skipHits
+		sta oldHit
+		cmp #$05
+		beq lowHits
+		cmp #$0a
+		beq medHits
+		cmp #$10
+		beq medHits
+		lda hit
+		cmp #$1d 
+		beq gameOVER
+		bra skipHits
+
+medHits:
+		dec player.speedTop
+		lda player.speedTOP
+		sta player.speedHI
+
+lowHits:
+		inc smoke
+
+skipHits:
+		rts
+
+gameOVER:
+		inc GO 
+		bra skipHits
+
+clearAdder:									; Clear the coprocessor adder so we don't get any weird reults.
+		stz ADD_A_LL
+		stz ADD_A_LH
+		stz ADD_A_HL
+		stz ADD_A_HH
+		stz ADD_B_LL
+		stz ADD_B_LH
+		stz ADD_B_HL
+		stz ADD_B_HH
+		rts
 
 clearTextScreen:							; clear the text screen for overlay purposes
 		lda #$02							; need to be in the right IO output to write to screen
@@ -658,10 +1012,49 @@ Speedometer:
 		sta $c499							; and place on the screen
 		lda htdOUT							; reload the low speed byte
 		and #$0f							; filter out the top 4 bits
-		tax									; transfer to x if indexing
+		tax									; transfer to x for indexing
 		lda numberText,x					; load the number from the table
 		sta $c49a							; and place it on the screen
-		stz MMU_IO_CTRL						; reset io to zero
+hitOmeter:
+		lda hit
+		sta htdIN
+		stz htdIN+1
+		jsr htd
+		lda htdOUT
+		lsr
+		lsr
+		lsr
+		lsr
+		tax
+		lda numberText,x 
+		sta $c4ac
+		lda htdOUT
+		and #$0f 
+		tax
+		lda numberText,x 
+		sta $c4ad
+
+gTimer:
+		lda gTimeHI
+		sta htdIN
+		stz htdIN+1
+		jsr htd
+		lda htdOUT
+		lsr
+		lsr
+		lsr
+		lsr
+		tax
+		lda numberText,x 
+		sta $c014
+		lda htdOUT
+		and #$0f 
+		tax
+		lda numberText,x 
+		sta $c015
+
+		stz MMU_IO_CTRL						; reset MMU back to zero
+
 		rts 
 
 ; Convert Hex to Decimal for readable Speedometer
@@ -705,7 +1098,7 @@ htd3:
 speedText:
 		.text "mph"
 numberText:
-		.text "0123456789 "
+		.text "0123456789abcdef"
 
 totalColors:	.byte $00					; This is a variable for the y index for the CLUT load routine
 
@@ -716,6 +1109,14 @@ joyX:		.byte $00						; signed X direction
 joyY:		.byte $00						; signed Y direction
 joyB:		.byte $00						; Button 0 Activated?
 roadMove:	.byte $80,$80					; Low/High Road Movement Position
+
+oldHit:		.byte $00
+hit:		.byte $00
+hitFlag:	.byte $00
+smoke:		.byte $00
+gTimeLO:	.byte $3c
+gTimeHI:	.byte $3c
+GO:			.byte $00
 
 ; LUT for Traffic tracking. 12 cars at most?
 traffic:		; every time a car enters the screen we'll need to determine car type, driving style, speed, lane, etc
@@ -735,20 +1136,47 @@ traffic:		; every time a car enters the screen we'll need to determine car type,
 		.byte	$0c,	248,	 $00,		$00,		$00,		$00,		$03,		$05,			$00,		$00,		$00,		$00,$00,$00,$00,		$01		
 	
 player:
-		.byte	$00,	22,		 $01,		$00,		220,		$00,		$01,		$07,			$00,		$00,		$08,		$00,$00,$00,$00,		$00
+		.byte	$00,	22,		 $01,		$00,		204,		$00,		$01,		$07,			$00,		$00,		$08,		9,2,23,30,		$00
 player.xFRAC:
 		.byte 	$00							; we needed a fixed point decimal for the player car X_POS that the traffic does not need.
 
-carsImage:
-		.byte <VWBeetle,>VWBeetle,<VWBeetle,>VWBeetle,<Toyota4Runner,>Toyota4Runner
-		.byte <BMW3,>BMW3,<Datsun280Z,>Datsun280Z
-		.byte <Corvair,>Corvair,<C10Pickup,>C10Pickup,<Galaxie500,>Galaxie500
-		.byte <AMCJavelin,>AMCJavelin,<JeepCJ5,>JeepCJ5,<JeepCJ5,>JeepCJ5,<Fiat131,>Fiat131
-		.byte <VWBeetle,>VWBeetle,<Corvair,>Corvair,<C10Pickup,>C10Pickup,<BMW3,>BMW3
+carsImage:									; locations of the pixel art for the cars
+		.word VWBeetle,Camaro,Toyota4Runner,BMW3,Datsun280Z
+		.word Corvair,C10Pickup,Galaxie500,AMCJavelin,JeepCJ5
+		.word JeepCJ5,Fiat131,Mustang,Challenger,C10Pickup,BMW3
 
-laneData:
+carsInfo:
+		.word Corvair
+		.byte $08
+		.word Mustang
+		.byte $08
+		.word Fiat131
+		.byte $08
+		.word BMW3
+		.byte $08
+
+laneData:									; x position for each lane
 		;lane       1,      2,      3,      4,      5,      6,shoulder
-		.byte $56,$00,$78,$00,$98,$00,$b8,$00,$db,$00,$f8,$00,$16,$01
+		.byte $58,$00,$78,$00,$98,$00,$b8,$00,$d8,$00,$f8,$00,$18,$01
+
+hitBox:										; Bounding squares for collsion detection, by car From CarsImage above.
+		.byte 9,3,23,30						; VWBeetle  Top Left and Bottom Right offset from position pointer
+		.byte 9,2,23,30						; Camaro
+		.byte 8,0,24,31						; Toyota4Runner
+		.byte 9,2,23,30						; BMW3
+		.byte 9,2,23,30						; Datsun280Z
+		.byte 9,2,23,30						; Corvair
+		.byte 9,0,23,31						; C10Pickup
+		.byte 9,1,23,30						; Galaxie500
+		.byte 9,2,23,30						; AMCJavelin
+		.byte 9,3,26,29						; JeepCJ5
+		.byte 9,3,26,29						; JeepCJ5
+		.byte 9,3,22,27						; Fiat131
+		.byte 9,2,23,30						; Mustang
+		.byte 9,2,23,30						; Challenger
+		.byte 9,0,23,31						; C10Pickup
+		.byte 9,2,23,30						; BMW3
+
 
 ;Image Data Starts here
 .include "RetroRacerCLUT.s"
