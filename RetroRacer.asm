@@ -116,7 +116,7 @@ SC:
 	
 		lda #$00							; Set the I/O page back to 0
 		sta MMU_IO_CTRL
-		jmp init_spites
+		jmp GameStart
 
 ; Color LUT loop. used for multiple LUTS if you have more than 1
 makeClut:
@@ -155,7 +155,20 @@ done_lut:
 		rts
 	
 
+; We set up the kernel timer here for the initial SOF
+GameStart:
 
+		lda #kernel.args.timer.FRAMES		; set the Timer to Frames
+		ora #kernel.args.timer.QUERY		; and query what frame we're on
+		sta kernel.args.timer.units			; store in units parameter
+		jsr kernel.Clock.SetTimer			; jsr to Kernel Routine
+		bcs skipSet							; If Carry set, ignore
+		adc #$01							; if not add 1 to Accumulator for next frame
+		sta $d0
+skipSet:
+		jsr SetTimer						; Let's get the kernel set up for the timer
+
+		jmp endGame
 		
 ;Set up Sprites
 init_spites:								; Kind of a stub here (brute force settings)
@@ -201,22 +214,41 @@ init_spites:								; Kind of a stub here (brute force settings)
 		sta VKY_SPa_CTRL+32					; $0e
 		sta VKY_SPa_CTRL+40					; $0f
 		sta VKY_SPa_CTRL+48					; $10
-		jmp GameStart
+
+		lda <#cloud1
+		sta VKY_SP6_AD_L
+		lda >#cloud1
+		sta VKY_SP6_AD_M
+		stz VKY_SP6_AD_H
+
+		lda <#cloud2
+		sta VKY_SP6_AD_L+8
+		lda >#cloud2
+		sta VKY_SP6_AD_M+8
+		stz VKY_SP6_AD_H+8
+
+		lda <#cloud3
+		sta VKY_SP6_AD_L+16
+		lda >#cloud3
+		sta VKY_SP6_AD_M+16
+		stz VKY_SP6_AD_H+16
+
+		lda <#cloud4
+		sta VKY_SP6_AD_L+24
+		lda >#cloud4
+		sta VKY_SP6_AD_M+24
+		stz VKY_SP6_AD_H+24
+
+		stz VKY_SP6_CTRL
+		stz VKY_SP6_CTRL+8
+		stz VKY_SP6_CTRL+16
+		stz VKY_SP6_CTRL+24
+
+;		jmp GameStart
 	
 
 	
-; We set up the kernel timer here for the initial SOF
-GameStart:
 
-		lda #kernel.args.timer.FRAMES		; set the Timer to Frames
-		ora #kernel.args.timer.QUERY		; and query what frame we're on
-		sta kernel.args.timer.units			; store in units parameter
-		jsr kernel.Clock.SetTimer			; jsr to Kernel Routine
-		bcs skipSet							; If Carry set, ignore
-		adc #$01							; if not add 1 to Accumulator for next frame
-		sta $d0
-skipSet:
-		jsr SetTimer						; Let's get the kernel set up for the timer
 
 ; Put the speedometer at the bottom of the screen
 		lda #$02
@@ -236,6 +268,7 @@ GameLoop:									; This is where we sit if not handling events
 		jsr manage_traffic					; checks on cars location so see if they've left the screen
 		jsr handle_events					; we'll check the handler in between other code so it doesn't need to wait if we hit SOF
 		jsr Speedometer						; print the speed at the bottom of the screen
+		jsr travelDisplay
 		jsr handle_events
 		jsr collisionCheck					; Check for any collisions with traffic
 		jsr handle_events
@@ -252,19 +285,27 @@ endGame:
 		stz VKY_SPa_CTRL+32					; $0e
 		stz VKY_SPa_CTRL+40					; $0f
 		stz VKY_SPa_CTRL+48					; $10
+
 waitLoop:
-		jsr Speedometer
-		jsr handle_events
-		lda joyB
-		beq waitLoop
-		stz oldHit
-		stz hit
-		stz smoke
-		stz GO
-		lda #$3c 
-		sta gTimeHI
-		sta gTimeLO
-		jmp init_spites
+		jsr Speedometer						; keep display the speed, we should be slowing down
+		stz gTimeHI							; make sure the timer is set to zero
+		stz gTimeLO
+		stz joyX							; make sure we are not gassing or braking
+		stz joyY
+		jsr handle_events					; check events
+		lda joyB							; if the joystick button pressed, start a new race
+		beq waitLoop						; if not, keep looping
+		stz oldHit							; reset hit counter
+		stz hit									
+		stz smoke							; reset smoke counter
+		stz travelLO
+		stz travelME
+		stz travelHI
+		stz GO								; reset Game Over flag
+		lda #$3c 							; set the timer to 60 seconds
+		sta gTimeHI						
+		sta gTimeLO							; and 60 frames since we count at SOF
+		jmp init_spites						; jump to init sprites to turn the traffice back on and place the player
 
 
 
@@ -334,8 +375,11 @@ UpdateScreen:
 		jsr SetTimer						; Reset the next timer for SOF
 		jsr updateClock
 		stz hitFlag							; clear the collision flag so we can test for collisions again
+		lda smoke							; check to see if car is smoking from damage
+		beq updateRoad						; if not, skip and go to road update
+		jsr makeSmoke						; if yes, jsr to smoke subroutine
 
-;update road								; Moving the Road by adjust the Tile Map
+updateRoad:									; Moving the Road by adjust the Tile Map
 		sec									; Set the carry for subtraction
 		lda roadMove						; load Road position (fixed decimal byte)
 		sbc player.speedLOW					; add player + 7 (player speed decimal Byte)
@@ -345,6 +389,24 @@ UpdateScreen:
 		sta roadMove+1						; and save
 		sta VKY_TM0_POS_Y_L					; Write to Vicky Map Position Y, Low Byte
 		stz VKY_TM0_POS_Y_H
+		lda travelLO
+		sta ADD_A_LL
+		lda travelME
+		sta ADD_A_LH
+		lda travelHI
+		sta ADD_A_HL
+		stz ADD_A_HH
+		lda player.speedHI
+		sta ADD_B_LL
+		stz ADD_B_LH
+		stz ADD_B_HL
+		stz ADD_B_HH
+		lda ADD_R_LL
+		sta travelLO
+		lda ADD_R_LH
+		sta travelME
+		lda ADD_R_HL 
+		sta travelHI
 
 ;update car position
 		clc
@@ -415,7 +477,7 @@ speedUp:
 		lda player.speedHI					; load player + 8 (speed H)
 		adc #$00							; Add carry
 		cmp player.speedTOP					; If we hit the player's top speed
-		beq topSpeed						; stop adding
+		bcs topSpeed						; stop adding
 		sta player.speedHI					; store if not over top speed
 		bra upDateTraffic					; we are done
 topSpeed:
@@ -427,7 +489,7 @@ topSpeed:
 slowDown:
 		sec									; Set carry for subtraction to slow down
 		lda player.speedLOW					; load player speed L
-		sbc #$03							; subtract 16
+		sbc #$03							; subtract 03
 		sta player.speedLOW					; and store
 		lda player.speedHI					; load player speed H
 		sbc #$00							; subtract carry
@@ -537,6 +599,167 @@ skipCarPlacement:							; kind of a stub for horizontal placement of traffic
 	
 doneCarsLoop:
 		rts
+
+makeSmoke:									; smoke routine repeated four time for 4 clouds
+		lda sm1T							; check the countdown timer for cloud 1
+		bne _skipNewSmoke					; if it's not zero, keep displaying it
+		lda Random_L						; if not, replace and set new random timer
+		and #$3f		
+		sta sm1T							; store new timer
+		lda player.xLOW						; get the player car position
+		sta sm1X							; and set the smoke position
+;		sta $82								; and store temp on ZP
+		lda player.xHI						; do the same for HI
+		sta sm1X+1 	
+;		sta $83
+		lda #204							; get the Y position - It doesn't change for the player
+		sta sm1Y 							; and store
+;		lda #$00
+		stz sm1Y+1
+_skipNewSmoke:
+		clc									; now we move the smoke
+		lda sm1Y							; load smoke postion Y
+		adc #$02							; add 2 to make it trail behind car
+		sta sm1Y 							; and store
+;		sta $80								; also store temp on ZP
+		lda sm1Y+1							; and add the Y HI
+		adc #$00
+		sta sm1Y+1							; and save
+;		sta $81
+		lda sm1X							; now load the temp variables
+		sta VKY_SP6_POS_X_L					; and write to sprite position registers
+		lda sm1X+1							; for X Low, HI and Y Low,HI
+		sta VKY_SP6_POS_X_H
+		lda sm1Y
+		sta VKY_SP6_POS_Y_L
+		lda sm1Y+1
+		sta VKY_SP6_POS_Y_H
+		dec sm1T							; decrease the cloud timer by 1
+		lda smoke							; load the smoke counter
+		cmp #$01							; do we only have one cloud?
+		bne _continueSmoke2					; no, go to smoke 2
+		jmp _returnFromSmoke				; yes return from this routine
+_continueSmoke2:							
+		lda sm2T							; now repeat this routine 3 more times for the
+		bne _skipNewSmoke2					; other clouds of smoke.
+		lda Random_L
+		and #$3f
+		sta sm2T
+		lda player.xLOW
+		sta sm2X
+;		sta $82
+		lda player.xHI
+		sta sm2X+1 
+;		sta $83
+		lda #204
+		sta sm2Y
+;		lda #$00
+		stz sm2Y+1
+_skipNewSmoke2:
+		clc
+		lda sm2Y
+		adc #$02
+		sta sm2Y 
+;		sta $80
+		lda sm2Y+1
+		adc #$00
+		sta sm2Y+1
+;		sta $81
+		lda sm2X
+		sta VKY_SP6_POS_X_L+8
+		lda sm2X+1
+		sta VKY_SP6_POS_X_H+8
+		lda sm2Y
+		sta VKY_SP6_POS_Y_L+8
+		lda sm2Y+1
+		sta VKY_SP6_POS_Y_H+8
+		dec sm2T
+
+		lda smoke
+		cmp #$02
+		bne _continueSmoke3
+		jmp _returnFromSmoke
+_continueSmoke3
+		lda sm3T
+		bne _skipNewSmoke3
+		lda Random_L
+		and #$3f
+		sta sm3T
+		lda player.xLOW
+		sta sm3X
+;		sta $82
+		lda player.xHI
+		sta sm3X+1 
+;		sta $83
+		lda #204
+		sta sm3Y 
+;		lda #$00
+		stz sm3Y+1
+_skipNewSmoke3:
+		clc
+		lda sm3Y
+		adc #$02
+		sta sm3Y 
+;		sta $80
+		lda sm3Y+1
+		adc #$00
+		sta sm3Y+1
+;		sta $81
+		lda sm3X
+		sta VKY_SP6_POS_X_L+16
+		lda sm3X+1
+		sta VKY_SP6_POS_X_H+16
+		lda sm3Y
+		sta VKY_SP6_POS_Y_L+16
+		lda sm3Y+1
+		sta VKY_SP6_POS_Y_H+16
+		dec sm3T
+
+		lda smoke
+		cmp #$03
+		bne _continueSmoke4
+		jmp _returnFromSmoke
+
+_continueSmoke4
+		lda sm4T
+		bne _skipNewSmoke4
+		lda Random_L
+		and #$3f
+		sta sm4T
+		lda player.xLOW
+		sta sm4X
+;		sta $82
+		lda player.xHI
+		sta sm4X+1 
+;		sta $83
+		lda #204
+		sta sm4Y
+;		lda #$00
+		stz sm4Y+1
+_skipNewSmoke4:
+		clc
+		lda sm4Y
+		adc #$02
+		sta sm4Y 
+;		sta $80
+		lda sm4Y+1
+		adc #$00
+		sta sm4Y+1
+;		sta $81
+		lda sm4X
+		sta VKY_SP6_POS_X_L+24
+		lda sm4X+1
+		sta VKY_SP6_POS_X_H+24
+		lda sm4Y
+		sta VKY_SP6_POS_Y_L+24
+		lda sm4Y+1
+		sta VKY_SP6_POS_Y_H+24
+		dec sm4T
+
+_returnFromSmoke:
+		rts									; Return to ScreenUpdate
+
+
 
 ; Set the timer to the next SOF for the Game Loop
 SetTimer:	
@@ -887,9 +1110,9 @@ bumpUp:										; player car behind traffic car
 		bmi skipZero
 		stz player.speedLOW
 		stz player.speedHI
+
 skipZero:		
 		sta player.speedHI
-
 		sec 								; traffic car gets bumped a forward 6 pixels
 		lda traffic.yLOW,y 
 		sbc #$06
@@ -900,7 +1123,6 @@ skipZero:
 		jmp bumpReturn2
 
 bumpDown:
-
 		clc 								; player car hit from behind
 		lda traffic.yLOW,y 					; player car maintains speed
 		adc #$06							; traffic car gets bumped back 6 pixels
@@ -942,6 +1164,14 @@ medHits:
 
 lowHits:
 		inc smoke
+		lda smoke
+		dec a
+		asl
+		asl
+		asl
+		tay
+		lda #$01
+		sta VKY_SP6_CTRL,y
 
 skipHits:
 		rts
@@ -1057,6 +1287,54 @@ gTimer:
 
 		rts 
 
+travelDisplay:
+		lda #$02
+		sta MMU_IO_CTRL
+
+
+		lda travelHI
+		lsr
+		lsr
+		lsr 
+		lsr 
+		tax
+		lda numberText,x 
+		sta $c000 
+		lda travelHI
+		and #$0f
+		tax 
+		lda numberText,x 
+		sta $c001
+		lda travelME
+		lsr 
+		lsr 
+		lsr 
+		lsr 
+		tax
+		lda numberText,x 
+		sta $c002
+		lda travelME
+		and #$0f
+		tax 
+		lda numberText,x 
+		sta $c003
+		lda travelLO
+		lsr 
+		lsr 
+		lsr 
+		lsr 
+		tax
+		lda numberText,x 
+		sta $c004
+		lda travelLO
+		and #$0f
+		tax 
+		lda numberText,x 
+		sta $c005
+
+		stz MMU_IO_CTRL						; reset MMU back to zero
+
+		rts 
 ; Convert Hex to Decimal for readable Speedometer
 htd:    lda htdIN							; this is our input number
 		stz htdOUT							; set the output bytes to zero
@@ -1116,7 +1394,27 @@ hitFlag:	.byte $00
 smoke:		.byte $00
 gTimeLO:	.byte $3c
 gTimeHI:	.byte $3c
-GO:			.byte $00
+
+travelLO:	.byte $00
+travelME:	.byte $00
+travelHI:	.byte $00
+
+GO:			.byte $01
+
+sm1X:		.byte $00,$00					; xLO,xHI
+sm1Y:		.byte $00,$00					; yLO,yHI
+sm2X:		.byte $00,$00					; xLO,xHI
+sm2Y:		.byte $00,$00					; yLO,yHI
+sm3X:		.byte $00,$00					; xLO,xHI
+sm3Y:		.byte $00,$00					; yLO,yHI
+sm4X:		.byte $00,$00					; xLO,xHI
+sm4Y:		.byte $00,$00					; yLO,yHI
+
+sm1T:		.byte $00						; smoke timer
+sm2T:		.byte $00						; smoke timer
+sm3T:		.byte $00						; smoke timer
+sm4T:		.byte $00						; smoke timer
+
 
 ; LUT for Traffic tracking. 12 cars at most?
 traffic:		; every time a car enters the screen we'll need to determine car type, driving style, speed, lane, etc

@@ -32,7 +32,17 @@ VKY_TM0_POS_X_H = $d215						; Tile Map 0 X Position & Scroll HIGH BYTE
 VKY_TM0_POS_Y_L = $d216						; Tile Map 0 Y Position & Scroll LOW BYTE
 VKY_TM0_POS_Y_H = $d217						; Tile Map 0 Y Position & Scroll HIGH BYTE
 
-; Sprite registers							; we're starting a $0a for cars in case we want something in front of them (explosions or ???)
+; Sprite registers		                    ; we're starting a $0a for cars in case we want something in front of them (explosions or ???)
+
+VKY_SP6_CTRL	= $D930						; Sprite 0a Control Register
+VKY_SP6_AD_L   	= $D931						; Sprite 0a Pixel Data Address Register
+VKY_SP6_AD_M   	= $D932
+VKY_SP6_AD_H   	= $D933
+VKY_SP6_POS_X_L = $D934						; Sprite 0a X Position Register
+VKY_SP6_POS_X_H = $D935
+VKY_SP6_POS_Y_L = $D936						; Sprite 0a X Position Register
+VKY_SP6_POS_Y_H = $D937
+
 VKY_SPa_CTRL	= $D950						; Sprite 0a Control Register
 VKY_SPa_AD_L   	= $D951						; Sprite 0a Pixel Data Address Register
 VKY_SPa_AD_M   	= $D952
