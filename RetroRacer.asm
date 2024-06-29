@@ -3,15 +3,15 @@
 ; 
 
 
-.include "RetroRacerInit.asm"				; all of our initial settings
-.cpu "w65c02"								; set the cpu to Western Digital 65C02
+		.include "RetroRacerInit.asm"		; all of our initial settings
+		.cpu "w65c02"						; set the cpu to Western Digital 65C02
 
 *=$a0										; Set up buffer for Kernel communication
-.dsection zp								; Define position for zp (zero page)
-.cerror * > $af, "Too many Zero page variables"
+		.dsection zp						; Define position for zp (zero page)
+		.cerror * > $af, "Too many Zero page variables"
 
 *=$2000										; Our regular code goes here
-.dsection code								; define that section of code
+		.dsection code						; define that section of code
 
 *=$1ffd
 
@@ -74,28 +74,60 @@ SC:
 		lda #%00000101						;Layer 2 = TileMap 1					  |xx|xx|xx|xx|xx|LA YE R2|	
 		sta VKY_LAYER_CTRL_1				;										  | 0| 0| 0| 0| 0| 1| 0| 1|
 
-;Set TileSet for our Image
+;Set TileSet 1 for our Game
+		lda #<TileSet
+		sta VKY_TS1_AD_L
+		lda #>TileSet
+		sta VKY_TS1_AD_M
+		lda #$01							
+		sta VKY_TS1_AD_H
+
+;Set TileSet 0 for our Title Image
 		lda #<TileSet
 		sta VKY_TS0_AD_L
 		lda #>TileSet
 		sta VKY_TS0_AD_M
-		lda #$00							; This should be equivelent to zero since we are staying in the first 64K of Ram 
+		lda #$01							
 		sta VKY_TS0_AD_H
+
+		
 	
+;Set Tile Map 1
+		lda #%00000001						; 16 x 16 tiles, enable					   |xx|xx|xx|TS|xx|xx|xx|EN|
+		sta VKY_TM1_CTRL					;										   | 0| 0| 0| 0| 0| 0| 0| 1|
+		lda #20								; Tile Map Size 20 X 
+		sta VKY_TM1_SZ_X
+		lda #200							; Tile Map Size 200 Y	This is really long so we need to add some more scenery.
+		sta VKY_TM1_SZ_Y
+
+		lda #<TileMapData					; Point to the Tile Map Data, LOW BYTE
+		sta VKY_TM1_AD_L
+		lda #>TileMapData					; Point to the Tile Map Data, MEDIUM BYTE
+		sta VKY_TM1_AD_M
+		lda #$01							; Point to the Tile Map Data, HIGH BYTE
+		sta VKY_TM1_AD_H
+
 ;Set Tile Map 0
 		lda #%00000001						; 16 x 16 tiles, enable					   |xx|xx|xx|TS|xx|xx|xx|EN|
 		sta VKY_TM0_CTRL					;										   | 0| 0| 0| 0| 0| 0| 0| 1|
 		lda #20								; Tile Map Size 20 X 
 		sta VKY_TM0_SZ_X
-		lda #200							; Tile Map Size 200 Y	This is really long so we need to add some more scenery.
+		lda #31								; Tile Map Size 200 Y	This is really long so we need to add some more scenery.
 		sta VKY_TM0_SZ_Y
 
-		lda #<TileMapData					; Point to the Tile Map Data, LOW BYTE
+		lda #<TitleMapData					; Point to the Tile Map Data, LOW BYTE
 		sta VKY_TM0_AD_L
-		lda #>TileMapData					; Point to the Tile Map Data, MEDIUM BYTE
+		lda #>TitleMapData					; Point to the Tile Map Data, MEDIUM BYTE
 		sta VKY_TM0_AD_M
-		lda #$00							; Point to the Tile Map Data, HIGH BYTE
+		lda #$01							; Point to the Tile Map Data, HIGH BYTE
 		sta VKY_TM0_AD_H
+
+		lda #$cb
+		sta VKY_TM0_POS_Y_L
+		stz VKY_TM0_POS_Y_H
+		stz VKY_TM0_POS_X_L
+		stz VKY_TM0_POS_X_H
+
 
 ;Load the sprite CLUT into memory
 		lda #$01							; Change I/O control to page 1
@@ -110,12 +142,49 @@ SC:
 		lda #>VKY_GR_CLUT_0
 		sta ptr_dst+1
 	
-		ldx #$00							; X is the number of colors to copy, check for 152
+		ldx #$00							; X is the number of colors to copy, check for 154
 		ldy #$9a
 		jsr makeClut
+
+		lda #<CLUT1							; Set source pointer to CLUT for color information
+		sta ptr_src
+		lda #>CLUT1
+		sta ptr_src+1
 	
-		lda #$00							; Set the I/O page back to 0
+		lda #<VKY_GR_CLUT_1					; Set destination pointer to Graphics CLUT 0
+		sta ptr_dst
+		lda #>VKY_GR_CLUT_1
+		sta ptr_dst+1
+	
+		ldx #$00							; X is the number of colors to copy, check for 255
+		ldy #$ff
+		jsr makeClut
+	
+
+
+		stz MMU_IO_CTRL
+setFont:
+		lda #<font
+		sta $80
+		lda #>font
+		sta $81
+		lda #$c1
+		stz $82
+		sta $83
+		ldy #$00
+		ldx #$03
+		lda #$01
 		sta MMU_IO_CTRL
+_sfLoop:
+		lda ($80),y
+		sta ($82),y 
+		iny
+		bne _sfLoop
+		inc $81
+		inc $83
+		dex
+		bne _sfLoop
+		stz MMU_IO_CTRL
 		jmp GameStart
 
 ; Color LUT loop. used for multiple LUTS if you have more than 1
@@ -188,7 +257,9 @@ init_spites:								; Kind of a stub here (brute force settings)
 		sta VKY_SPa_AD_L
 		lda carsInfo+1,x
 		sta VKY_SPa_AD_M
-		stz VKY_SPa_AD_H
+		lda #$01
+		sta VKY_SPa_AD_H
+;	sta VKY_SPa_CTRL
 		lda carsInfo+2,x
 		sta player.speedTop
 
@@ -201,7 +272,8 @@ init_spites:								; Kind of a stub here (brute force settings)
 		ldx #204							; towards the bottom of the screen
 		stx VKY_SPa_POS_Y_L
 		stx player.yLOW
-		stz VKY_SPa_POS_Y_H
+		lda #$00
+		sta VKY_SPa_POS_Y_H
 		stz player.yHI
 		stz player.yFRAC
 		stz player.speedLOW
@@ -219,25 +291,29 @@ init_spites:								; Kind of a stub here (brute force settings)
 		sta VKY_SP6_AD_L
 		lda >#cloud1
 		sta VKY_SP6_AD_M
-		stz VKY_SP6_AD_H
+		lda #$01
+		sta VKY_SP6_AD_H
 
 		lda <#cloud2
 		sta VKY_SP6_AD_L+8
 		lda >#cloud2
 		sta VKY_SP6_AD_M+8
-		stz VKY_SP6_AD_H+8
+		lda #$01
+		sta VKY_SP6_AD_H+8
 
 		lda <#cloud3
 		sta VKY_SP6_AD_L+16
 		lda >#cloud3
 		sta VKY_SP6_AD_M+16
-		stz VKY_SP6_AD_H+16
+		lda #$01
+		sta VKY_SP6_AD_H+16
 
 		lda <#cloud4
 		sta VKY_SP6_AD_L+24
 		lda >#cloud4
 		sta VKY_SP6_AD_M+24
-		stz VKY_SP6_AD_H+24
+		lda #$01
+		sta VKY_SP6_AD_H+24
 
 		stz VKY_SP6_CTRL
 		stz VKY_SP6_CTRL+8
@@ -262,6 +338,7 @@ textLoop:
 		bne textLoop
 		stz MMU_IO_CTRL
 
+; ************************************************************************************************************************************		
 ;Game Loop Starts Here		
 GameLoop:									; This is where we sit if not handling events 
 		jsr handle_events					; check the events handler
@@ -278,6 +355,8 @@ GameLoop:									; This is where we sit if not handling events
 		bne endGame
 		jmp GameLoop
 
+; ************************************************************************************************************************************
+
 endGame:
 		stz VKY_SPa_CTRL+8					; $0b
 		stz VKY_SPa_CTRL+16					; $0c
@@ -286,15 +365,36 @@ endGame:
 		stz VKY_SPa_CTRL+40					; $0f
 		stz VKY_SPa_CTRL+48					; $10
 
+
 waitLoop:
 		jsr Speedometer						; keep display the speed, we should be slowing down
 		stz gTimeHI							; make sure the timer is set to zero
 		stz gTimeLO
 		stz joyX							; make sure we are not gassing or braking
 		stz joyY
+		lda player.speedHI
+		sta SID_L_VOL
+		sta SID_R_VOL
+		bne _skipSpeed
+		lda player.speedLOW
+		cmp #$40
+		bcs _skipSpeed
+		lda #$40
+		sta player.speedLOW
+		lda #%00000001						; 16 x 16 tiles, enable					   |xx|xx|xx|TS|xx|xx|xx|EN|
+		sta VKY_TM0_CTRL	
+		stz smoke
+		stz VKY_SP6_CTRL
+		stz VKY_SP6_CTRL+8
+		stz VKY_SP6_CTRL+16
+		stz VKY_SP6_CTRL+24
+		stz VKY_SPa_CTRL
+		stz mTimer							; stops music play
+_skipSpeed:
 		jsr handle_events					; check events
 		lda joyB							; if the joystick button pressed, start a new race
 		beq waitLoop						; if not, keep looping
+		stz VKY_TM0_CTRL					; kill title screen
 		stz oldHit							; reset hit counter
 		stz hit									
 		stz smoke							; reset smoke counter
@@ -305,10 +405,43 @@ waitLoop:
 		lda #$3c 							; set the timer to 60 seconds
 		sta gTimeHI						
 		sta gTimeLO							; and 60 frames since we count at SOF
+		stz SID_L1_GATE
+		stz SID_L2_GATE
+		stz SID_L3_GATE
+		stz SID_R1_GATE
+		stz SID_R2_GATE
+		stz SID_R3_GATE
+		
+		lda #$0f							; set the SID volume to 15
+		sta SID_L_VOL
+		sta SID_R_VOL
+		lda #$09 
+		sta SID_L1_ATDL
+		sta SID_L1_STRL
+		sta SID_R1_ATDL
+		sta SID_R1_STRL
+		sta SID_L1_PULS_L
+		sta SID_L1_PULS_H
+		lda #$42
+		sta SID_L2_ATDL
+		sta SID_R2_ATDL
+		lda #$79
+		sta SID_L2_STRL
+		sta SID_R2_STRL
+		lda #$ff
+		sta nCounter
+		lda #<notes2
+		sta $70
+		lda #>notes2
+		sta $71
+		lda #<notes3
+		sta $72
+		lda #>notes3
+		sta $73
 		jmp init_spites						; jump to init sprites to turn the traffice back on and place the player
 
 
-
+; ************************************************************************************************************************************
 
 handle_events:
 		lda kernel.args.events.pending		; Peek at the queue to see if anything is pending
@@ -327,6 +460,8 @@ dispatch:
 		cmp #kernel.event.JOYSTICK			; is the event a Joystick Change?
 		beq setJoyStick
 		rts
+
+; ************************************************************************************************************************************
 
 ;Read the joystick on event and set a direction to be used during the SOF cycle
 setJoyStick:
@@ -369,15 +504,33 @@ jDone:
 
 
 
-
+; ************************************************************************************************************************************
 ; These are events that happen at SOF, 60 times per second
 UpdateScreen:
 		jsr SetTimer						; Reset the next timer for SOF
 		jsr updateClock
 		stz hitFlag							; clear the collision flag so we can test for collisions again
 		lda smoke							; check to see if car is smoking from damage
-		beq updateRoad						; if not, skip and go to road update
+		beq _skipSmoke						; if not, skip 
 		jsr makeSmoke						; if yes, jsr to smoke subroutine
+_skipSmoke:
+		inc mTimer							; increment the music timer
+		lda mTimer							; load and compare with set time
+		cmp #$08 							; to determine if we should play the next note
+		bne _skipMusic						; if not skip
+		jsr playNotes						; if yes, go to music playing routine
+_skipMusic:
+		clc									;generate a pulse for music
+		lda pulse1
+		adc #$40
+		sta pulse1
+		sta SID_L2_PULS_L
+		sta SID_R2_PULS_L
+		lda pulse1+1
+		adc #$00
+		sta pulse1+1
+		sta SID_L2_PULS_H
+		sta SID_R2_PULS_H
 
 updateRoad:									; Moving the Road by adjust the Tile Map
 		sec									; Set the carry for subtraction
@@ -387,15 +540,16 @@ updateRoad:									; Moving the Road by adjust the Tile Map
 		lda roadMove+1						; load the low byte of road position (Tilemap Low)
 		sbc player.speedHI					; add player + 8 (player speed byte)
 		sta roadMove+1						; and save
-		sta VKY_TM0_POS_Y_L					; Write to Vicky Map Position Y, Low Byte
-		stz VKY_TM0_POS_Y_H
+		sta VKY_TM1_POS_Y_L					; Write to Vicky Map Position Y, Low Byte
+		stz VKY_TM1_POS_Y_H
 		lda travelLO
 		sta ADD_A_LL
 		lda travelME
 		sta ADD_A_LH
 		lda travelHI
 		sta ADD_A_HL
-		stz ADD_A_HH
+		lda #$01
+		sta ADD_A_HH
 		lda player.speedHI
 		sta ADD_B_LL
 		stz ADD_B_LH
@@ -462,7 +616,7 @@ _placeSprite:
 		sta VKY_SPa_POS_X_H					; set the Vicky Sprite 0 Position H
 
 
-
+; ************************************************************************************************************************************
 ;Joystick Y controls speed
 testY:
 
@@ -599,6 +753,8 @@ skipCarPlacement:							; kind of a stub for horizontal placement of traffic
 	
 doneCarsLoop:
 		rts
+
+; ************************************************************************************************************************************
 
 makeSmoke:									; smoke routine repeated four time for 4 clouds
 		lda sm1T							; check the countdown timer for cloud 1
@@ -760,7 +916,7 @@ _returnFromSmoke:
 		rts									; Return to ScreenUpdate
 
 
-
+; ************************************************************************************************************************************
 ; Set the timer to the next SOF for the Game Loop
 SetTimer:	
 		inc $d0
@@ -791,6 +947,8 @@ mk60:
 setGameOver:
 		inc GO
 		rts
+
+; ************************************************************************************************************************************
 
 manage_traffic:
 		ldx #$00
@@ -851,6 +1009,8 @@ changeCar:
 		sta VKY_SPa_AD_L,x 					; and write to the sprite register locations for LOW
 		lda $81
 		sta VKY_SPa_AD_M,x 					; and High
+		lda #$01
+		sta VKY_SPa_AD_H,x
 		lda traffic.lane,y
 		asl 
 		tax
@@ -916,6 +1076,9 @@ doneCar
 		jmp trafficTestLoop					; No, loop around to do the next car
 doneTrafficLoop:
 		rts	
+
+; ************************************************************************************************************************************
+; Check for collisions
 
 collisionCheck:
 		lda hitFlag							; check to see if we already have a collision. If so we need to wait for screen
@@ -1180,6 +1343,8 @@ gameOVER:
 		inc GO 
 		bra skipHits
 
+; ************************************************************************************************************************************
+
 clearAdder:									; Clear the coprocessor adder so we don't get any weird reults.
 		stz ADD_A_LL
 		stz ADD_A_LH
@@ -1189,6 +1354,13 @@ clearAdder:									; Clear the coprocessor adder so we don't get any weird reul
 		stz ADD_B_LH
 		stz ADD_B_HL
 		stz ADD_B_HH
+		rts
+
+clearMultiplier:
+		stz MULU_A_L
+		stz MULU_A_H
+		stz MULU_B_L
+		stz MULU_B_H
 		rts
 
 clearTextScreen:							; clear the text screen for overlay purposes
@@ -1210,6 +1382,7 @@ loopClearText:
 		stz MMU_IO_CTRL						; reset io control back to zero
 		rts
 
+; ************************************************************************************************************************************		
 ; Generate the speedometer
 Speedometer:
 		lda player.speedLOW					; our speed has a fixed point decimal so we need to move that away.  HHHHLLLL LLLL.FFFF
@@ -1287,6 +1460,9 @@ gTimer:
 
 		rts 
 
+; ************************************************************************************************************************************		
+; Distance travelled
+
 travelDisplay:
 		lda #$02
 		sta MMU_IO_CTRL
@@ -1335,7 +1511,114 @@ travelDisplay:
 		stz MMU_IO_CTRL						; reset MMU back to zero
 
 		rts 
+
+
+; ************************************************************************************************************************************		
+; Music Player
+
+playNotes:
+		inc nCounter				  	;increment the note counter
+		stz mTimer						; reset the timer	
+		ldx nCounter					; load the note from notes1
+		lda notes1,x 		
+		cmp #$ff						; look for the end flag
+		bne nextNote 					; if not $ff play the note
+		sta nCounter					; if it is $ff, set the counter and loop
+		bra playNotes	
+nextNote:
+		asl 							; multiply note by two
+		tax								; transfer to x for indexing
+		stz SID_L1_GATE					; close gate
+		stz SID_R1_GATE
+		lda freq,x						; load the frequency lo from the table
+		sta SID_L1_FREQ_L				; store in register
+		sta SID_R1_FREQ_L				; both sid registers
+		lda freq+1,x 					; load frequency hi from the table
+		sta SID_L1_FREQ_H				; store in the register
+		sta SID_R1_FREQ_H				; both register
+
+		lda #$41 						; triangle wave, open gate This is all temp (maybe)
+		sta SID_L1_GATE
+		lda #$21						; Pulse wave
+		sta SID_R1_GATE
+;		rts
+melody:
+		ldy #$00
+		lda ($70),y 
+		cmp #SK
+		beq mdone1
+		cmp #RT
+		beq rest2
+		cmp #$ff
+		bne nextMNote
+		lda #<notes2
+		sta $70
+		lda #>notes2
+		sta $71
+		bra melody
+rest2:
+		stz SID_L2_GATE
+		bra mdone1
+nextMNote:
+		asl
+		tax
+		stz SID_L2_GATE
+		lda freq,x 
+		sta SID_L2_FREQ_L
+		lda freq+1,x 
+		sta SID_L2_FREQ_H
+		lda #$41
+		sta SID_L2_GATE
+mdone1:
+		clc
+		lda $70
+		adc #$01
+		sta $70
+		lda $71
+		adc #$00
+		sta $71
+;		rts
+
+harmony:
+		ldy #$00
+		lda ($72),y 
+		cmp #SK
+		beq hdone1
+		cmp #RT
+		beq rest3
+		cmp #$ff
+		bne nextHNote
+		lda #<notes3
+		sta $72
+		lda #>notes3
+		sta $73
+		bra harmony
+rest3:
+		stz SID_R2_GATE
+		bra hdone1
+nextHNote:
+		asl
+		tax
+		stz SID_R2_GATE
+		lda freq,x 
+		sta SID_R2_FREQ_L
+		lda freq+1,x 
+		sta SID_R2_FREQ_H
+		lda #$41
+		sta SID_R2_GATE
+hdone1:
+		clc
+		lda $72
+		adc #$01
+		sta $72
+		lda $73
+		adc #$00
+		sta $73
+		rts
+
+; ************************************************************************************************************************************	
 ; Convert Hex to Decimal for readable Speedometer
+
 htd:    lda htdIN							; this is our input number
 		stz htdOUT							; set the output bytes to zero
 		stz htdOUT+1
@@ -1415,6 +1698,7 @@ sm2T:		.byte $00						; smoke timer
 sm3T:		.byte $00						; smoke timer
 sm4T:		.byte $00						; smoke timer
 
+pulse1:		.byte $00,$00
 
 ; LUT for Traffic tracking. 12 cars at most?
 traffic:		; every time a car enters the screen we'll need to determine car type, driving style, speed, lane, etc
@@ -1476,14 +1760,146 @@ hitBox:										; Bounding squares for collsion detection, by car From CarsImag
 		.byte 9,2,23,30						; BMW3
 
 
+* = $0500
+
+font:
+;		.binary "atari_letters.bin"			; The Atari letters
+;		.binary "Retro.bin"					; experimental Letters
+;		.binary "atari_future.bin"			; retro atari letters (letters missing a line of data)
+		.binary "fat_letters.bin"			; Fat letters
+
+; MuSIC Data Starts Here
+		.include "notes.s"
+		.include "SID_Freq.s"				; table of SID frequencies for music
+
+
+;music notes
+mTimer:	.byte $00							; counter against TOF for timing purposes
+mFlag:	.byte $00							; when counter hits a certain number we've hit a 16th note
+nCounter:
+		.byte $00							; what note in the sequence have we hit\
+n2Counter:
+		.byte $00
+notes1:
+		.byte G2,E2,E2,G2,E2,E2,G2,E2,E2,G2,E2,E2,G2,E2,G2,E2
+		.byte G2,E2,E2,G2,E2,E2,G2,E2,E2,G2,E2,E2,G2,E2,G2,E2
+		.byte C3,A2,A2,C3,A2,A2,C3,A2,A2,C3,A2,A2,C3,A2,C3,A2
+		.byte C3,A2,A2,C3,A2,A2,C3,A2,A2,C3,A2,A2,C3,A2,C3,A2
+		.byte $ff																	; temp repeat flag
+
+notes2:
+		.byte RT,RT,RT,RT,RT,RT,RT,RT,RT,RT,RT,RT,RT,RT,RT,RT 	; MEASURE 1
+		.byte RT,RT,RT,RT,RT,RT,RT,RT,RT,RT,RT,RT,RT,RT,RT,RT
+		.byte RT,RT,RT,RT,RT,RT,RT,RT,RT,RT,RT,RT,RT,RT,RT,RT
+		.byte RT,RT,RT,RT,RT,RT,RT,RT,RT,RT,RT,RT,RT,RT,RT,RT
+		.byte G4,SK,SK,A4,SK,SK,E4,SK,SK,SK,SK,SK,SK,SK,SK,SK	; MEASURE 5
+		.BYTE G4,SK,SK,A4,SK,SK,E4,SK,SK,SK,SK,SK,SK,SK,C5,SK
+		.byte SK,SK,SK,B4,SK,SK,A4,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte C5,SK,SK,B4,SK,SK,A4,SK,SK,SK,SK,SK,SK,SK,D4,SK
+		.byte G4,SK,SK,A4,SK,SK,E4,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte G4,SK,SK,A4,SK,SK,E4,SK,SK,SK,SK,SK,SK,SK,B4,SK	; MEASURE 10
+		.byte C5,SK,B4,SK,SK,SK,A4,SK,SK,SK,E4,SK,SK,SK,SK,SK
+		.byte C5,SK,B4,SK,SK,SK,A4,SK,SK,SK,E4,SK,SK,SK,D4,SK
+		.byte G4,SK,SK,B4,SK,SK,E4,SK,SK,SK,SK,SK,SK,SK,A4,SK
+		.byte G4,SK,A4,SK,SK,SK,E4,SK,SK,SK,SK,SK,A4,SK,B4,SK
+		.byte C5,SK,SK,B4,SK,SK,A4,SK,SK,SK,E4,SK,SK,SK,SK,SK	; MEASURE 15
+		.byte C5,SK,B4,SK,SK,SK,A4,SK,SK,SK,E4,SK,C4,SK,D4,SK
+		.byte G4,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,A4,SK
+		.byte E4,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,D4,SK,SK,SK
+		.byte C5,SK,SK,SK,SK,SK,E4,SK,SK,SK,SK,SK,A4,SK,C5,SK
+		.byte E4,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,A4,SK	; MEASURE 20
+		.byte B4,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK	;FIRST CHORD HERE
+		.byte SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,B4,SK
+		.byte C5,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte G4,SK,SK,A4,SK,SK,E4,SK,SK,SK,SK,SK,SK,SK,D4,SK	; MEASURE 25
+		.byte G4,SK,SK,A4,SK,SK,E4,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte C5,SK,B4,SK,SK,SK,A4,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte C5,SK,B4,SK,SK,SK,A4,SK,SK,SK,SK,SK,SK,SK,E4,SK
+		.byte G4,SK,SK,SK,B4,SK,A4,SK,SK,SK,SK,SK,SK,SK,SK,SK   ;MEASURE 29 START
+		.byte G4,SK,B4,SK,SK,SK,E4,SK,SK,SK,SK,SK,SK,SK,SK,SK	; MEASURE 30
+		.byte C5,SK,B4,SK,RT,RT,A4,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte C5,SK,B4,SK,RT,RT,A4,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte G4,SK,B4,SK,RT,RT,A4,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte G4,SK,B4,SK,SK,SK,E4,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte C5,SK,B4,SK,RT,SK,A4,SK,SK,SK,SK,SK,SK,SK,SK,SK	; MEASURE 35
+		.byte C5,SK,B4,SK,A4,SK,A4,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte G4,SK,B4,SK,RT,SK,E4,SK,SK,SK,SK,SK,SK,SK,A4,SK
+		.byte G4,SK,A4,SK,RT,SK,E4,SK,SK,SK,SK,SK,SK,SK,B4,SK
+		.byte C5,SK,B4,SK,SK,SK,A4,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte A4,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,RT,SK,SK,SK	; MEASURE 40
+		.byte $ff
+
+notes3:
+		.byte RT,RT,RT,RT,RT,RT,RT,RT,RT,RT,RT,RT,RT,RT,RT,RT 	; MEASURE 1
+		.byte SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK	; MEASURE 5
+		.byte SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK	; MEASURE 10
+		.byte SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK	; MEASURE 15
+		.byte SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK	; MEASURE 20
+		.byte G4,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,D4,SK
+		.byte E4,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte RT,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK	; MEASURE 25
+		.byte SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte D4,SK,SK,SK,G4,SK,E4,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte SK,SK,G4,SK,SK,SK,C4,SK,SK,SK,SK,SK,SK,SK,SK,SK	; MEASURE 30
+		.byte A4,SK,RT,SK,E4,SK,E4,SK,SK,SK,SK,SK,SK,SK,RT,SK
+		.byte A4,SK,RT,SK,E4,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte D4,SK,F4,SK,E4,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte D4,SK,F4,SK,SK,SK,C4,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte A4,SK,E4,SK,RT,SK,E4,SK,SK,SK,SK,SK,SK,SK,RT,SK	; MEASURE 35
+		.byte RT,SK,SK,SK,E4,SK,E4,SK,SK,SK,SK,SK,SK,SK,RT,SK
+		.byte RT,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte RT,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK 
+		.byte RT,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK
+		.byte RT,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK,SK	 ; MEASURE 40
+		.byte $ff
+
+
+
+
+
+
+
+;CLUT data		
+		.include "RetroRacerCLUT.s"
+		.include "RetroRacerTitleCLUT.s"
+
+
+
+* = $10000														;Putting the image data in High Memory because it's easier for Vicky to use it than me!
+
 ;Image Data Starts here
-.include "RetroRacerCLUT.s"
-.include "RetroRacerSprites.s"
-.include "RetroRacerTileset.s"
+
+		.include "RetroRacerSprites.s"
+		.include "RetroRacerTileset.s"
+		.include "RetroRacerTitleSet.s"
 																; We load the tilemap from a .tlm file made by Aseprite as binary data
 TileMapData:													;Because the emulator is a little different from the actual I have 2 tilemaps. Only one should be active.
 ;		.binary "RetroRacerTilemapA.tlm"						;For the emulator version
 		.binary "RetroRacerTilemapB.tlm"						;For the actual computer
+
+TitleMapData:
+
+		.binary "RetroRacerTitleMap.tlm"
 
 
 
